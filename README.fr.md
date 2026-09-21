@@ -9,6 +9,10 @@ naturellement trop prudente — tiennent sur une seule page, en clair, avec le
 compromis écrit **à côté** de chaque réglage plutôt qu'enterré dans un wiki.
 Rien ne sort de votre Mac.
 
+![L'interface](docs/screenshot.png)
+
+*Une seule page, active pendant qu'un lot tourne.*
+
 > Interface **non officielle**. Elle n'est ni faite par l'équipe YuE / m-a-p
 > ni affiliée à elle. Elle ne contient pas le modèle.
 

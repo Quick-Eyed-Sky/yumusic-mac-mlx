@@ -8,6 +8,10 @@ harmony the base model normally keeps too safe — is on one page, in plain
 English, with the trade-off written **beside** each control instead of
 buried in a wiki. Nothing leaves your Mac.
 
+![The interface](docs/screenshot.png)
+
+*One page, live while a batch runs.*
+
 > This is an **unofficial** front-end. It is not made by or affiliated with
 > the YuE / m-a-p team. It does not include the model.
 
