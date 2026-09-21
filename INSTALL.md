@@ -202,12 +202,16 @@ the bottom of the page shows what is happening while you wait.
 
 ---
 
-## ➕ Optional extra: drafting a style prompt from a rough idea
+## ➕ Optional extras
 
-Not required — everything else works without it. One panel on the page can
-turn a rough idea (*"a sad the cure track, slow, with choir at the end"*)
-into a proper style prompt, using a small language model running locally on
-your Mac through [Ollama](https://ollama.com).
+None of these are required — the app renders WAV files and works fully
+without any of them. Add whichever ones you actually want.
+
+### Drafting a style prompt from a rough idea
+
+One panel on the page can turn a rough idea (*"a sad the cure track, slow,
+with choir at the end"*) into a proper style prompt, using a small language
+model running locally on your Mac through [Ollama](https://ollama.com).
 
 ```
 brew install ollama
@@ -223,6 +227,28 @@ If you do not have Homebrew yet:
 That is about 5.5 GB and a few minutes. The panel finds Ollama automatically
 and the drafting field stops being greyed out.
 
+### MP3/FLAC export, MIDI export, and the sheet-music preview
+
+**These are three separate tools, each optional on its own.** Skip any of
+them and the matching checkbox or panel still appears — it just writes one
+line to the Log telling you what's missing and what to run, instead of
+failing quietly. All three come from Homebrew:
+
+```
+brew install ffmpeg    # for the "Also save MP3" / "Also save FLAC" boxes
+brew install abcmidi   # for the "Also save MIDI" box (needs the abc2midi tool it provides)
+brew install abcm2ps   # for the sheet-music preview under "Results"
+```
+
+If you do not have Homebrew yet:
+
+```
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Install any subset of the three — the app checks for each independently at
+the moment it needs it, not all at once at startup.
+
 ---
 
 ## 🆘 If something goes wrong
@@ -235,6 +261,7 @@ and the drafting field stops being greyed out.
 | `unidentified developer` | Step 6️⃣. Right-click → Open. |
 | Model variant menu is empty | No variant folder was found under the model repo. Re-run step 3️⃣. |
 | An out-of-memory error during a render | Try the 4-bit variant, and a shorter duration. |
+| Ticked "Also save MP3"/FLAC/MIDI but the file isn't there | Check the **Log** box on the page — it names the missing tool and the `brew install` command for it. See *Optional extras* above. |
 | Anything else | Open an issue on GitHub with what the Terminal window printed — that is usually enough to answer you. |
 
 ---

@@ -143,7 +143,7 @@ box first, and leaving text in it costs nothing.
 | **Disk** | ~5 GB for the recommended 8-bit model; up to ~11 GB more if you add bf16 and 4-bit as well. |
 | **macOS** | Sonoma (14) or later. |
 | **Also needed** | The YuE2-3B-MLX model — [INSTALL.md](INSTALL.md) covers it. |
-| **Optional** | [Ollama](https://ollama.com) (style-prompt drafting), ffmpeg is *not* needed — MP3/FLAC export is built in. |
+| **Optional** | [Ollama](https://ollama.com) (style-prompt drafting). **For MP3/FLAC/MIDI export and the sheet-music preview:** `ffmpeg`, `abcmidi` and `abcm2ps`, all via Homebrew — [INSTALL.md](INSTALL.md) covers it. Without them, ticking those boxes writes a line to the Log explaining what's missing, not a silent success. |
 
 ---
 
