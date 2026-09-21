@@ -74,18 +74,45 @@ answers `command line tools are already installed`, which is equally fine.
 
 ## 2️⃣ A private Python environment
 
+Your Mac's built-in `python3` can be surprisingly old — some Macs still carry
+a leftover Python 3.9 from years ago — and that mismatch is the single most
+common cause of this install breaking later with a cryptic `ImportError`
+(`cannot import name 'HfFolder' from 'huggingface_hub'` is the one people
+actually hit). So instead of trusting whatever `python3` happens to mean on
+your Mac, this step uses a tool called **uv** to fetch a known-good, private
+Python just for YuMusic.
+
 ```
-mkdir -p ~/YuE
-python3 -m venv ~/YuE/venv
-source ~/YuE/venv/bin/activate
-pip install --upgrade pip
-pip install mlx tiktoken numpy huggingface_hub gradio
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-**What happens:** a couple of minutes of `Collecting...` / `Installing...`
-lines. This creates a private Python inside `~/YuE/venv` that does not touch
-the Python your Mac already has — removing it later means deleting one
-folder.
+**Then close the Terminal window completely and open a new one** (Command-Q,
+then Command-Space, `terminal`, Return). This is not optional — the new
+command only becomes visible to a freshly opened window.
+
+Check it worked:
+
+```
+uv --version
+```
+
+You should see something like `uv 0.12.14`. The exact number does not
+matter. If instead you see `command not found: uv`, the most likely reason
+is that you did not open a *new* window — try that first.
+
+Now build the environment:
+
+```
+mkdir -p ~/YuE
+uv venv ~/YuE/venv --python 3.12
+source ~/YuE/venv/bin/activate
+uv pip install mlx tiktoken numpy huggingface_hub gradio
+```
+
+**What happens:** a minute or so of `Resolved...` / `Installed...` lines.
+This creates a private Python 3.12 inside `~/YuE/venv` — "private" is the
+point, nothing here touches the Python your Mac already has, and removing it
+later means deleting one folder.
 
 **Every time you come back to a fresh Terminal window**, this environment
 needs switching on again with:
@@ -255,7 +282,9 @@ the moment it needs it, not all at once at startup.
 
 | What you see | What it means |
 |---|---|
+| `command not found: uv` | Step 2️⃣ did not finish, or you did not open a **new** Terminal window after installing it. |
 | `command not found: hf` | Step 2️⃣ did not finish, or this Terminal window was not the one where you ran `source ~/YuE/venv/bin/activate`. |
+| `ImportError: cannot import name 'HfFolder' from 'huggingface_hub'` (or any import error mentioning `huggingface_hub`) | Step 2️⃣ was built with your Mac's own old `python3` instead of a private one via `uv` — this happens on Macs with a leftover Python 3.9. Delete the broken environment (`rm -rf ~/YuE/venv`) and redo step 2️⃣ exactly as written, starting from `uv venv`. |
 | Launcher says it can't find the model repo | Step 3️⃣ did not finish, or the model lives somewhere other than `~/YuE/YuE2-3B-MLX` — set `YUE_REPO` to tell it where. |
 | Double-clicking the launcher opens a text editor | Step 5️⃣. The executable bit was lost in the ZIP. |
 | `unidentified developer` | Step 6️⃣. Right-click → Open. |
@@ -283,18 +312,19 @@ most drives are formatted as when you buy them.
 ## 🗑️ Removing all of this
 
 Delete the folder `~/YuE` and the folder you unzipped this into. That is
-everything: no system files are touched, nothing is installed globally.
+everything: no system files are touched, nothing is installed globally except
+`uv` itself, which lives in `~/.local/bin` and can be deleted too.
 
 ---
 
 ## ⚡ The short version
 
-For people who already have `git`, Python and a Terminal habit:
+For people who already have `git`, `uv` and a Terminal habit:
 
 ```
-mkdir -p ~/YuE && python3 -m venv ~/YuE/venv
+mkdir -p ~/YuE && uv venv ~/YuE/venv --python 3.12
 source ~/YuE/venv/bin/activate
-pip install mlx tiktoken numpy huggingface_hub gradio
+uv pip install mlx tiktoken numpy huggingface_hub gradio
 cd ~/YuE && hf download ahmadw/YuE2-3B-MLX --include "*.py" --include "8bit/*" --local-dir YuE2-3B-MLX
 git clone https://github.com/Quick-Eyed-Sky/yumusic-mac-mlx.git
 chmod +x yumusic-mac-mlx/launch_yumusic.command
