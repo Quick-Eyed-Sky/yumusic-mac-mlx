@@ -20,6 +20,26 @@ buried in a wiki. Nothing leaves your Mac.
 
 ---
 
+## 🧪 Still experimental
+
+Two controls on this page do not fully deliver what their name promises,
+and burying that in a table further down would be dishonest.
+
+**Harmonic daring** pushes the model's own score-planning sampling past the
+range it was tuned for. That is the entire mechanism - there is no separate
+"safe" version of a daring score underneath it. High settings can, and
+sometimes do, produce a score that falls apart rather than one that is
+merely surprising. Start low, and treat anything past the middle of the
+slider as deliberately unstable, not as a bug report.
+
+**Instrumental does not reliably silence the model.** Ticking it asks YuE2
+for no voice at all, and it measurably reduces vocals - but the base model
+does not obey the instruction the way a dedicated switch would. Some
+renders still come back with singing. Treat a fully instrumental take as a
+good outcome this render gave you, not a guarantee the setting makes.
+
+---
+
 ## 🤔 Why this exists
 
 YuE2 writes a full musical score — melody and chord symbols, in ABC notation

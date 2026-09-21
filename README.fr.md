@@ -21,6 +21,28 @@ Rien ne sort de votre Mac.
 
 ---
 
+## 🧪 Encore expérimental
+
+Deux réglages de cette page ne tiennent pas entièrement ce que leur nom
+promet, et l'enterrer dans un tableau plus bas serait malhonnête.
+
+**Harmonic daring** pousse l'échantillonnage de l'étape de planification du
+modèle au-delà de la plage pour laquelle il a été réglé. C'est tout le
+mécanisme - il n'y a pas de version « sûre » cachée en dessous d'une
+partition audacieuse. Des réglages élevés peuvent produire, et produisent
+parfois, une partition qui se délite plutôt qu'une partition simplement
+surprenante. Commencez bas, et considérez tout ce qui dépasse le milieu du
+curseur comme volontairement instable, pas comme un bug à signaler.
+
+**Instrumental ne fait pas taire le modèle de façon fiable.** Cocher la
+case demande à YuE2 de n'avoir aucune voix du tout, et cela réduit
+nettement le chant - mais le modèle de base n'obéit pas à cette consigne
+comme le ferait un interrupteur dédié. Certains rendus reviennent quand
+même avec du chant. Considérez un rendu réellement instrumental comme une
+bonne surprise de ce rendu-là, pas comme une garantie que donne ce réglage.
+
+---
+
 ## 🤔 Pourquoi cette interface
 
 YuE2 écrit une partition complète — mélodie et symboles d'accords, en
