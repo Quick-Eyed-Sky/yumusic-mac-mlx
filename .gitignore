@@ -1,0 +1,24 @@
+# Your music. Renders stay on your machine.
+outputs/
+*.wav
+*.flac
+*.mp3
+*.mid
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors
+.vscode/
+.idea/
+*.swp
