@@ -277,7 +277,8 @@ open the one setting that actually controls it.
 If it saved you an afternoon, you can
 [buy me a coffee](https://buymeacoffee.com/oFJ5CiY7n). Entirely optional,
 and the project stays exactly as free either way.
-[![Buy Me A Coffee](https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png)](https://buymeacoffee.com/oFJ5CiY7n)
+
+<a href="https://buymeacoffee.com/oFJ5CiY7n"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="28"></a>
 
 ---
 
