@@ -28,7 +28,7 @@ import gradio as gr
 # together with the model it drives, so a screenshot or a log always says
 # exactly what produced it.
 
-VERSION = "2.20"
+VERSION = "2.22"
 MODEL_FAMILY = "YuE2-3B"
 MODEL_REPO = "ahmadw/YuE2-3B-MLX"       # the Apple Silicon build of m-a-p/YuE2-3B
 MODEL_UPSTREAM_URL = "https://github.com/multimodal-art-projection/YuE"
@@ -114,62 +114,56 @@ def prompt_mode_note(label, text):
     return f"**{label}: fixed** - used exactly as typed for every track."
 
 
+# ------------------------------------------------------------------ texts --
+#
+# 2.22 rewrote every explanation on the page. The rule: say what the control
+# does, what to set it to, and what it costs - in that order, in short
+# sentences, and only what was measured. The long stories behind each number
+# live in comments like this one and in the README, not on the page.
+
 PROMPT_HELP = (
-    "The prompt tells us how to treat it - there is nothing to choose. "
-    "Plain text is used as typed. `{bright|dark}` picks one at random per track. "
-    "Several complete versions separated by a line containing only `---` are "
-    "used one per track, in order, looping."
+    "`{bright|dark}` picks one of the choices at random for each track. A line holding "
+    "only `---` separates complete versions, used one per track, in turn."
 )
 
+STYLE_HOWTO = (
+    "**Style prompt**  \n"
+    "A list of musical facts, separated by commas - not sentences. In this order: "
+    "genre, era, voice, instruments, rhythm, harmony, production, tempo, mood.\n\n"
+    "*Dark synth-pop, restrained female alto, dry close vocal, analog polysynths, "
+    "sequenced bass, sparse electronic drums, minor-key harmony, 105 BPM, nocturnal.*\n\n"
+    "Words like *beautiful* or *amazing* give the model nothing to play.\n\n"
+    + PROMPT_HELP
+)
+
+LYRICS_HOWTO = (
+    "**Lyrics**  \n"
+    "Only the words to be sung, with section tags. Anything else written here is sung "
+    "too - musical directions belong in the Style prompt.\n\n"
+    "Paste the words first, then click where a tag goes and press it:"
+)
+
+STYLE_STRENGTH_TITLE = "Style-prompt fidelity (CFG)"
 STYLE_STRENGTH_INFO = (
-    "1.0 is off, and fastest. Above 1.0 the render follows the wording of your Style and Lyrics harder, and takes about twice as long."
+    "1.0 = off: the model's own setting, and the fastest. Higher values make the sound "
+    "follow the words of your Style and Lyrics more strictly, and the render takes about "
+    "**twice as long**. It does not touch the score (melody and chords).  \n"
+    "*Its effect has not been measured yet (168 of the 181 test tracks were made at 1.0). "
+    "Compare a few tracks at 1.0 and 1.5 before using it on a batch.*"
 )
 
-def labelled(title, info, factory, text_scale=2, control_scale=3):
-    """Explanation on the left, control on the right, as one block - instead of a
-    paragraph stacked on top of a slider, which pushes the value box away from
-    its own track and makes a long page longer."""
-    with gr.Row(equal_height=True):
-        with gr.Column(scale=text_scale, min_width=0):
-            gr.Markdown(f"**{title}**  \n{info}")
-        with gr.Column(scale=control_scale, min_width=0):
-            component = factory()
-    return component
 
-
-def hint(title, text):
-    """A one-line explanation ABOVE a slider, so the slider keeps its value box
-    tucked against its track instead of being pushed away by its own info text."""
-    return f"**{title}** - {text}"
-
-
-MOTION_INFO = (
-    "Replaces repeated chords with chords that lead somewhere. The answer to 'it sounds flat'. 1 puts a dominant before each change."
-)
-
-HARMONY_STAFF_INFO = (
-    "Adds a staff that spells every chord out as real notes, instead of only naming it above the melody."
-)
-
-KEY_CHANGES_INFO = (
-    "How often the key moves. 0 never, 1-4 at section boundaries, 5 a repeating sequence."
-)
-
-MOD_TYPE_INFO = (
-    "Which kind of key change. 'Parallel mode' moves no notes at all; 'Direct lift' raises only the final section."
-)
-
-MOVE_MELODY_INFO = (
-    "Transpose the written notes along with the chords. Leave this on, or the melody stays behind in the old key."
-)
-
-GROUP_SIZE_INFO = (
-    "Sequential type only: how many chords go by before the key steps again."
-)
-
+DARING_TITLE = "Harmonic daring"
 DARING_INFO = (
-    "How adventurous the model is allowed to be while it writes the score, before any audio exists. 3 is what it ships with."
+    "How adventurous the model is while it **writes the score** - melody and chords "
+    "together, before any sound exists. This is the real harmony control, and its chords "
+    "fit the melody because both are written at once.  \n"
+    "3 is the model's own setting: plain loops. On 181 test tracks, **7 to 9** was the "
+    "useful zone and 10 sometimes broke the score. The line under the slider says what "
+    "each setting gave there - a trend, not a promise."
 )
+DARING_INFO_SPECTRUM = DARING_INFO + (
+    "  \n*It acts here only. The harmony pass below has its own daring.*")
 
 # ------------------------------------------------------------------ length --
 
@@ -186,6 +180,39 @@ def frames_from_duration(duration_s):
     if d <= 0:
         return None
     return max(1, min(MODEL_MAX_FRAMES, round(d / SECONDS_PER_FRAME)))
+
+
+# How the score and the duration meet. Measured on 23 September 2026 on 181
+# originals: the model writes a whole piece first (median 2:31, 1:26 to 4:51
+# for 80% of them), whatever the duration, and the duration only cuts the
+# sound. With lyrics the length follows the lyrics - 8 to 15 sung lines gave
+# about two minutes, 48 or more gave five. See score_length.py.
+FIT_CHOICES = {
+    "Stop the sound at the duration (as before)": "cut",
+    "Shorten the score to fit - ends at a section boundary": "trim",
+    "Play the whole score - the duration is ignored (max 6 min)": "whole",
+}
+DEFAULT_FIT = "Stop the sound at the duration (as before)"
+FIT_LABEL_BY_MODE = {v: k for k, v in FIT_CHOICES.items()}
+TYPICAL_SCORE_SECONDS = 150
+
+LENGTH_INFO = (
+    "The model always writes a **whole piece** first - usually 2 to 3 minutes - and "
+    "then plays it. The duration only says **where the sound stops**: at 30 s "
+    "you hear the intro, and half of a typical score is never played.  \n"
+    "With lyrics, the piece follows the lyrics: fewer lines, shorter piece. With "
+    "`[instrumental]`, only the choice on the right can shorten it."
+)
+
+FIT_INFO_NOTE = (
+    "*Shorten* and *whole* are new in 2.22. *Whole* keeps the same piece as *stop*, only "
+    "longer. *Shorten* changes the score, so it is a different take - check a few endings "
+    "by ear before a big batch."
+)
+
+
+def fit_mode(label):
+    return FIT_CHOICES.get(label, "cut")
 
 
 # ------------------------------------------------------------ harmonic daring --
@@ -215,6 +242,43 @@ def daring_label(daring):
     tag = "repo default" if round(float(daring)) == DARING_DEFAULT else \
           ("safe" if float(daring) < DARING_DEFAULT else "adventurous")
     return f"temperature {t:.3f}, top_p {p:.3f}, top_k {k}  ({tag})"
+
+
+# What each setting of the daring did to 181 test tracks, measured on
+# 23 September 2026 (see "HARMONY_PASS - diagnostic et refonte.md", 1.1):
+# distinct chords over the whole score, share of tracks with a key change,
+# and how often bars came out the wrong length. The prompts differ from row to
+# row and some rows hold three tracks, so this is a trend, not an experiment -
+# which is why every line says how many tracks it rests on.
+DARING_EVIDENCE = {
+    0: "Plainer than the model's own setting. *(not measured)*",
+    1: "Plainer than the model's own setting. *(not measured)*",
+    2: "A little plainer than the model's own setting. *(not measured)*",
+    3: "The model's own setting: about **2 different chords** - a loop. *(3 tracks)*",
+    4: "Probably **3 to 5 chords**, no key change. *(not measured)*",
+    5: "About **5 different chords**, no key change, clean score. *(5 tracks)*",
+    6: "About **6 chords**, no key change, clean score. *(101 tracks - the best-measured "
+       "setting)*",
+    7: "About **6 chords**, no key change seen, clean score. *(4 tracks)*",
+    8: "About **8 chords**; 1 track in 20 changes key; now and then a few bars come out "
+       "the wrong length. *(44 tracks)*",
+    9: "About **10 chords**; 1 track in 4 changes key; no broken bars seen. *(only 4 "
+       "tracks)*",
+    10: "About **18 chords**; 2 tracks in 5 change key; **some scores fall apart** (up to "
+        "70% of the bars the wrong length). *(20 tracks)*",
+}
+
+
+def daring_meaning(daring):
+    """What to expect from this setting, from 181 measured tracks - instead of the
+    temperature / top_p / top_k it maps to, which say nothing to a musician.
+    The numbers themselves are still written into every .txt."""
+    try:
+        d = int(round(float(daring)))
+    except (TypeError, ValueError):
+        d = DARING_DEFAULT
+    d = max(0, min(10, d))
+    return f"**{d}** - {DARING_EVIDENCE[d]}"
 
 
 # ------------------------------------------------------------------ prompts --
@@ -287,8 +351,8 @@ class StopController:
         proc = self.process.get("proc")
         if proc is not None and proc.poll() is None:
             proc.terminate()
-            return "Stopping - killing the render in flight. The batch halts right after."
-        return "Stopping - the batch halts before the next render starts."
+            return "Stopped. The render in progress was cancelled - nothing of it is saved."
+        return "Stopped before the next render started."
 
     def run(self, cmd, cwd):
         """Run a render, yielding its output line by line."""
@@ -307,7 +371,8 @@ class StopController:
 
 def render_command(*, model_path, style, lyrics_file, out_path, seed, planning="full",
                     abc_file=None, cfg_scale=None, steps=None, max_frames=None,
-                    daring=None, abc_prefix_file=None):
+                    daring=None, abc_prefix_file=None, plan_only=False,
+                    cfg_negative_abc_file=None, fit="cut"):
     """Build the argv for one render, through our runner (see yue_runner.py)."""
     cmd = [sys.executable, str(RUNNER),
            "--repo", str(REPO_DIR),
@@ -331,6 +396,12 @@ def render_command(*, model_path, style, lyrics_file, out_path, seed, planning="
         t, p, k = daring_to_sampling(daring)
         cmd += ["--abc-temperature", f"{t:.3f}", "--abc-top-p", f"{p:.3f}",
                 "--abc-top-k", str(k)]
+    if plan_only:
+        cmd += ["--plan-only"]
+    if cfg_negative_abc_file is not None:
+        cmd += ["--cfg-negative-abc-file", str(cfg_negative_abc_file)]
+    if fit and fit != "cut" and not plan_only:
+        cmd += ["--fit-score", fit]
     return cmd
 
 
@@ -368,14 +439,14 @@ BATCH_NAME_INFO = (
 )
 
 MIDI_INFO = (
-    "Also write a .mid beside each track, to drag into GarageBand. Needs abc2midi: brew install abcmidi"
+    "MIDI needs abc2midi, installed once with `brew install abcmidi`."
 )
 
 
 def run_folder(root, batch, stamp):
     """A folder for the whole run, so two batches cannot mix."""
-    # A folder name may keep its spaces - "Dune Zimmer 20260916-1100" reads
-    # better than "Dune_Zimmer...", and only the characters that would break a
+    # A folder name may keep its spaces - "Night Glass 20260916-1100" reads
+    # better than "Night_Glass...", and only the characters that would break a
     # path need to go. Filenames inside it still use the strict safe_name().
     name = re.sub(r'[/\\:\x00]+', " ", (batch or "").strip()).strip() or "spectrum"
     folder = Path(root) / f"{name[:60]} {stamp}"
@@ -464,7 +535,14 @@ SIDECAR_FIELDS = {
     "model_variant":   r'^Model variant:\s*(\S+)',
     "seed":            r'^Seed:\s*(-?\d+)',
     "planning":        r'^Score planning:\s*(.+?)\s*$',
-    "daring":          r'^Harmonic daring:\s*(\d+)',
+    # Spectrum 2.21 wrote "Score-writing daring", and restoring one of its tracks
+    # silently left the daring alone. Both spellings are read.
+    "daring":          r'^(?:Harmonic|Score-writing) daring:\s*(\d+)',
+    "fit":             r'^Score fit:\s*(\w+)',
+    "steps":           r'^Audio refinement steps:\s*(\d+)',
+    # Spectrum's richness floor may have raised the daring to get its score.
+    # That daring, not the one on the slider, is what wrote this track.
+    "floor_daring":    r'richness floor: \d+ distinct chords at daring (\d+)',
     "style_strength":  r'^Style strength.*?:\s*([\d.]+)',
     "duration_s":      r'^Target duration \(s\):\s*(\d+)',
     "meter":           r'^Metre:\s*([^,\n]+)',
@@ -496,6 +574,8 @@ def read_sidecar(text):
         m = re.search(pat, text, re.MULTILINE)
         if m:
             info[key] = m.group(1).strip()
+    if "floor_daring" in info:
+        info["daring"] = info["floor_daring"]
     for tag, field in (("Style", "style"), ("Lyrics", "lyrics")):
         m = re.search(rf'---\s*{tag}.*?---\s*\n(.*?)(?:\n\n---|\Z)', text, re.DOTALL)
         if m:
@@ -503,28 +583,63 @@ def read_sidecar(text):
     return info
 
 
-def sidecar_for(path):
+# Where tracks are written, in this folder and in the published layout. A file
+# dropped on the page is a COPY in Gradio's own temporary folder - the browser
+# never tells the server where the original was - so its .txt is not beside
+# it. It is found here instead, by name: every filename carries a timestamp
+# and a seed, so the name alone identifies the track.
+SEARCH_ROOTS = [V2_DIR / "outputs", V2_DIR / "YuMusic2" / "outputs",
+                V2_DIR / "Spectrum2" / "spectrum_outputs",
+                V2_DIR / "HarmonyMutator2" / "mutations"]
+
+
+def _track_stem(name):
+    for suffix in (".latents.npy", ".wav", ".mp3", ".flac", ".abc", ".mid", ".npy", ".txt"):
+        if name.lower().endswith(suffix):
+            return name[: -len(suffix)]
+    return Path(name).stem
+
+
+def sidecar_for(path, roots=None):
     """The .txt that belongs to a track, given ANY of the track's files.
 
     Drop the wav, the mp3, the score, the MIDI or the .txt itself - they all
-    share a stem, so any of them finds the settings. That is the whole point:
-    you should not have to remember which file holds what."""
+    share a stem, so any of them finds the settings. Until 2.22 only the .txt
+    worked: the others were looked up beside Gradio's temporary copy, where
+    nothing else ever is, and the page said "No settings file found"."""
     path = Path(path)
     if path.suffix.lower() == ".txt" and path.exists():
         return path
-    stem = path.name
-    for suffix in (".latents.npy", ".wav", ".mp3", ".flac", ".abc", ".mid", ".npy"):
-        if stem.lower().endswith(suffix):
-            stem = stem[: -len(suffix)]
-            break
-    else:
-        stem = path.stem
+    stem = _track_stem(path.name)
     candidate = path.with_name(stem + ".txt")
-    return candidate if candidate.exists() else None
+    if candidate.exists():
+        return candidate
+    for root in list(roots or []) + SEARCH_ROOTS:
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        for hit in root.rglob(stem + ".txt"):
+            return hit
+    return None
+
+
+def stop_now(stop, progress, awake):
+    """What the Stop button does. Returns (message, progress bar).
+
+    Stop cancels the running batch outright, so the batch never reaches its
+    own last lines: the bar stayed frozen on "Render 3 of 5", and - worse -
+    the anti-sleep it had started kept the Mac awake until the next batch
+    ended. Both are handled here, where the cancel happens."""
+    message = stop.request()
+    awake.stop()
+    done, total = progress.done, progress.total
+    text = (f"**Stopped.** {done} of {total} render{'s' if total != 1 else ''} finished."
+            if total else "**Stopped.**")
+    return message, progress_html(text, 0.0)
 
 
 def restored_note(path, info):
-    """One line saying what came back, and what could not."""
+    """What came back, and the one thing worth knowing about using it."""
     name = Path(path).name
     if not info:
         return f"*`{name}` does not look like a track written by these apps.*"
@@ -534,17 +649,21 @@ def restored_note(path, info):
     if "duration_s" in info:
         bits.append(f"{info['duration_s']} s")
     if "daring" in info:
-        bits.append(f"daring {info['daring']}")
+        bits.append(f"daring {info['daring']}" + (" (the one the richness floor chose)"
+                                                  if "floor_daring" in info else ""))
     if "richness" in info:
         bits.append(f"richness {info['richness']}")
-    harmony = " The harmony settings came back too." if "richness" in info else \
-              " This is an original take, so the harmony controls were left alone."
-    return (f"**Restored from `{name}`** - " + ", ".join(bits) + "." + harmony +
-            "\n\nThe style prompt is put back **exactly as it was sent**, so the "
-            "Instrumental box and the rhythm slider are left at zero - their wording is "
-            "already inside the text, and adding it twice would change the prompt, and a "
-            "changed prompt is a different piece. Raise the duration and press Generate: "
-            "the composition stays the same, you simply get more of it.")
+    harmony = " The harmony settings came back too." if "richness" in info else ""
+    if info.get("fit") == "trim":
+        more = ("This track was made from a **shortened** score. To hear the whole piece "
+                "it was cut from, set *When the score is longer* to **Play the whole score**.")
+    else:
+        more = ("To hear **more of the same piece**, set *When the score is longer* to "
+                "**Play the whole score** and press Generate - same seed, same piece, "
+                "nothing cut off.")
+    return (f"**Restored from `{name}`** - " + ", ".join(bits) + "." + harmony + "  \n"
+            + more + "  \n*The style comes back exactly as it was sent, so Instrumental and "
+            "Rhythmic complexity are left at zero: their words are already in it.*")
 
 
 # ---------------------------------------------------------------- estimates --
@@ -555,11 +674,9 @@ SPEED = {"bf16": 1.6, "8bit": 0.9, "4bit": 0.7}
 LOAD_SECONDS = 45
 
 
-def estimate_batch(renders, duration_s, variant_subdir, cfg_scale=None):
-    """A plain-language 'is this an overnight job?' line."""
-    renders = max(0, int(renders))
-    if renders == 0:
-        return "Nothing to render with these settings."
+def render_seconds(duration_s, variant_subdir, cfg_scale=None):
+    """Roughly how long ONE render takes. Guidance above 1.0 runs the model
+    twice per token, so it roughly doubles."""
     try:
         dur = float(duration_s) or 60
     except (TypeError, ValueError):
@@ -567,12 +684,59 @@ def estimate_batch(renders, duration_s, variant_subdir, cfg_scale=None):
     per = dur * SPEED.get(variant_subdir, 1.3) + LOAD_SECONDS
     if cfg_scale and float(cfg_scale) > 1.0:
         per = per * 2 - LOAD_SECONDS
-    total = renders * per
+    return per
+
+
+def _clock_words(total):
     hours, minutes = int(total // 3600), int((total % 3600) // 60)
-    clock = f"{hours} h {minutes:02d}" if hours else f"{minutes} min"
-    return (f"This run will render {renders} audio file"
-            f"{'s' if renders != 1 else ''} - roughly {clock} "
-            f"(plus the .abc and .txt beside each one).")
+    return f"{hours} h {minutes:02d}" if hours else f"{minutes} min"
+
+
+def _fit_duration(duration_s, fit):
+    """The length a render will really have, as far as it can be known before
+    the score is written. 'whole' is priced at a typical score."""
+    if fit == "whole":
+        return TYPICAL_SCORE_SECONDS
+    return duration_s
+
+
+def _fit_words(fit):
+    return ("  *Priced at a typical 2:30 score - the real length is known only once each "
+            "score is written.*" if fit == "whole" else "")
+
+
+def estimate_batch(renders, duration_s, variant_subdir, cfg_scale=None, fit="cut"):
+    """A plain-language 'is this an overnight job?' line."""
+    renders = max(0, int(renders))
+    if renders == 0:
+        return "Nothing to render with these settings."
+    total = renders * render_seconds(_fit_duration(duration_s, fit), variant_subdir, cfg_scale)
+    return (f"**{renders} track{'s' if renders != 1 else ''}** - roughly "
+            f"**{_clock_words(total)}**." + _fit_words(fit))
+
+
+def estimate_run(originals, versions_each, duration_s, variant_subdir,
+                  cfg_original=None, cfg_harmony=None, fit="cut"):
+    """The same sentence, with the two stages priced apart.
+
+    From 2.21 the harmony pass has its own guidance, so a run can be quick in
+    part 1 and twice as slow in part 2. Pricing the whole run at one cfg was
+    out by up to a factor of two on exactly the runs that take longest - which
+    is when knowing matters."""
+    originals = max(0, int(originals))
+    versions_each = max(0, int(versions_each))
+    renders = originals * (1 + versions_each)
+    if renders == 0:
+        return "Nothing to render with these settings."
+    duration_s = _fit_duration(duration_s, fit)
+    a = originals * render_seconds(duration_s, variant_subdir, cfg_original)
+    b = originals * versions_each * render_seconds(duration_s, variant_subdir, cfg_harmony)
+    line = (f"**{renders} audio file{'s' if renders != 1 else ''}** - roughly "
+            f"**{_clock_words(a + b)}**." + _fit_words(fit))
+    if versions_each and cfg_harmony and float(cfg_harmony) > 1.0:
+        line += (f"  Of that, {_clock_words(b)} is the harmony pass, doubled by its "
+                 f"score adherence of {float(cfg_harmony):g}.")
+    return line
 
 
 # =========================================================================== #
@@ -606,8 +770,8 @@ class KeepAwake:
                                           stdout=subprocess.DEVNULL,
                                           stderr=subprocess.DEVNULL)
             return ("This Mac will be kept awake until the batch finishes - the screen may "
-                    "still switch off. (A sleeping Mac drops the browser connection, which "
-                    "is what stopped the run of 15 September at track 13.)")
+                    "still switch off. (A sleeping Mac drops the browser connection, and "
+                    "that stops a batch.)")
         except Exception:
             self.proc = None
             return ("Note: could not hold off sleep. If this is an overnight batch, set "
@@ -715,6 +879,9 @@ def progress_html(text, fraction, done=False, segments=0):
     reads as twenty boxes filling up rather than one anonymous sliding bar."""
     pct = max(0.0, min(1.0, float(fraction))) * 100
     colour = "#22c55e" if done else "#f97316"
+    # The text is written with Markdown bold, but this is HTML: until 2.22 the
+    # bar said **Render 3 of 20** with the asterisks showing.
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text or "")
     ticks = ""
     if segments and 1 < int(segments) <= 60:
         step = 100.0 / int(segments)
@@ -738,7 +905,7 @@ IDLE_PROGRESS = progress_html("Not running.", 0.0)
 # ------------------------------------------------------------- instrumental --
 #
 # "[instrumental]" in the lyrics means "there are no words to sing". It does NOT
-# mean "there are no voices" - and on 16 September a Dune prompt proved the
+# mean "there are no voices" - and on 16 September a film-score prompt proved the
 # difference: the lyrics said [instrumental], while the style prompt asked for
 # "breathy female vocal fragments", "ghostly wordless choir harmonics",
 # "female voices as breath, whispers, cries", "enormous choral masses" and
@@ -753,7 +920,7 @@ VOICE_WORDS = ("vocal", "voice", "voices", "choir", "choral", "sung", "singing",
                "singer", "soprano", "tenor", "whisper", "whispers", "chant",
                "vocals", "humming", "wordless")
 
-# At the FRONT, not the end. JP found this on 16 September: his own
+# At the FRONT, not the end. Found on 16 September: a
 # "NO SINGER, NO LYRICS" typed at the top of a prompt worked where a sentence
 # appended at the bottom had not. The model weighs the opening of a prompt more
 # heavily, so a refusal belongs there.
@@ -761,10 +928,9 @@ NO_VOICE_HEAD = ("NO SINGER, NO LYRICS, NO VOCALS, NO CHOIR, NO HUMMING, "
                  "NO WORDLESS SINGING.")
 
 INSTRUMENTAL_INFO = (
-    "Writes `[instrumental]` as the lyrics and puts a refusal of voices at the **front** of "
-    "your style prompt, which is where it works. Both are needed: `[instrumental]` only "
-    "means there are no WORDS, and a style prompt that asks for a choir will still get you "
-    "one."
+    "Sends `[instrumental]` as the lyrics **and** puts *NO SINGER, NO VOCALS, NO CHOIR...* "
+    "at the start of the style, where it works best. Both are needed: a style that asks "
+    "for a choir still gets a choir. Not 100% reliable."
 )
 
 
@@ -788,7 +954,7 @@ def instrumental_note(style, on):
                 "refusal of voices added to your style.")
     return ("**Careful - your style prompt asks for voices.** It contains: "
             + ", ".join(f"`{w}`" for w in asked[:8])
-            + ". A refusal will be added at the end, but the model weighs the whole prompt: "
+            + ". The refusal is added at the start, but the model weighs the whole prompt: "
               "the surest fix is to take those words out yourself.")
 
 
@@ -824,11 +990,10 @@ METERS = {
 DEFAULT_METER = "As the model likes (usually 4/4)"
 
 METER_INFO = (
-    "Writes the opening lines of the score for the model, so it composes in this metre. "
-    "Asking for it in words does not work; this does. Measured: 3/4 holds for a whole "
-    "track, every bar. 7/8 obeys for a few bars and then the model writes its own M:4/4 "
-    "and goes back to four - it has seen too little seven to stay in it. The tempo box "
-    "beside it is honoured whatever the metre."
+    "Writes the first line of the score for the model, which is the only way to get a "
+    "metre - asking in words does not work. **3/4** holds for a whole track. **7/8** holds "
+    "a few bars, then drifts back to 4/4; expect the same from 5/4 and 9/8.  \n"
+    "Tempo: 0 lets the model choose. Any other number is followed, whatever the metre."
 )
 
 # Rhythmic complexity is a different thing from metre: 'Close to the Edit' is in
@@ -847,9 +1012,17 @@ RHYTHM_WORDS = {
        "abrupt metric displacement, breakbeat edits, the downbeat repeatedly hidden",
 }
 RHYTHM_INFO = (
-    "Adds wording to the end of your style prompt. This one really is just words - "
-    "the model has no rhythm dial - but it is the lever that exists, and it works."
+    "Adds one sentence about rhythm to the end of your style prompt. Only words - the "
+    "model has no rhythm control - but it is the one lever there is. 0 adds nothing."
 )
+
+
+def rhythm_note(level):
+    """The exact sentence the slider adds, so nothing is added blind."""
+    words = RHYTHM_WORDS.get(int(level or 0))
+    if not words:
+        return "*Nothing added.*"
+    return f"*Adds:* \u201c{words[0].upper()}{words[1:]}.\u201d"
 
 
 def apply_rhythm(style, level):
@@ -879,16 +1052,21 @@ def abc_prefix_for(meter, tempo=None):
 # --------------------------------------------------------------- simple mode --
 
 SEED_WARNING = (
-    "**The track seed is fixed at {seed}.** Every track in this run will be the SAME piece - "
-    "a fixed seed reproduces one composition, it does not vary it. That is what you want when "
-    "you are developing a track you liked. Set it back to **-1** for a batch of different "
-    "pieces."
+    "**The seed is fixed at {seed}: every track in this run will be the same piece.** "
+    "Right for developing one track; for a batch of different pieces, set it back to **-1**."
 )
 
 SEED_WARNING_VARY = (
-    "**The track seed starts at {seed}** and steps up by one for each track, so you get "
-    "{n} different pieces - but a different set from the one -1 would have given you. "
-    "Set it to **-1** unless you are deliberately re-running a series."
+    "**The seed starts at {seed} and adds 1 per track**: {n} different pieces, but a "
+    "different set from what -1 would give. Use -1 unless you are re-running a series."
+)
+
+SEED_TITLE = "Seed"
+SEED_INFO = (
+    "**-1** = a new piece for every track. **A number** = that exact piece again: each "
+    "track's seed is written in its .txt.  \n"
+    "With a fixed seed and several tracks, *add 1* gives neighbouring pieces instead of "
+    "copies of one."
 )
 
 
@@ -906,49 +1084,28 @@ def seed_note(seed, vary, tracks):
         return SEED_WARNING_VARY.format(seed=seed, n=n)
     if n > 1:
         return SEED_WARNING.format(seed=seed)
-    return (f"**The track seed is fixed at {seed}** - this will reproduce that exact piece. "
-            f"Raise the duration and it stays the same composition, only longer.")
+    return (f"**The seed is fixed at {seed}** - this reproduces that exact piece. To hear "
+            f"more of it, choose *Play the whole score* under Length.")
 
 
 PAUSE_INFO = (
-    "A rest between tracks, so the machine is quiet for a while and you can use it. "
-    "**It is not needed to protect anything, and here is the measurement:** across your own "
-    "75-render Dune batch the second half took 326 seconds per render and the first half "
-    "took 326 seconds - no slowdown at all. Two other batches actually got faster. A Mac "
-    "mini M4 Pro holds its speed all night, and macOS has never recorded a thermal warning "
-    "on this machine.\n\nThe one thermal emergency in the logs happened while the Mac was "
-    "trying to sleep, with the fans held low - which is exactly what the anti-sleep added in "
-    "2.11 now prevents. So leave this at 0 unless you want the noise to stop for a while."
+    "Seconds of rest between tracks, only if you want the fans to stop for a while. Not "
+    "needed for safety: over a 75-render batch, a Mac mini M4 Pro kept the same speed all "
+    "night."
 )
 
 
 NO_NAME_MESSAGE = (
-    "**This run has no name.** Give it one in the yellow box above and press Generate "
-    "again.\n\nIt takes two seconds now and saves an hour later: the name goes at the "
-    "front of every filename and names the folder the whole run is saved in. Without it "
-    "you get a folder called `spectrum` among all the other folders called `spectrum`."
+    "**This run has no name.** Type one in the yellow box and press Generate again. The "
+    "name starts every filename and names the run's folder - without it you get one more "
+    "folder called `spectrum`."
 )
 
 
 BATCH_NAME_HEADER = (
-    "Your own name for this run. It goes at the front of every filename and names the "
-    "folder the run is saved in - so a night's work can still be found in a month."
+    "Starts every filename and names the run's folder - so it can be found in a month."
 )
 
-SIMPLE_MODE = "Simple - how many, and how daring"
-ADVANCED_MODE = "Advanced - I will set every control myself"
-HARMONY_MODES = [SIMPLE_MODE, ADVANCED_MODE]
-
-MUTATION_COUNT_INFO = (
-    "How many different harmonisations of each track to render. They come out ordered, "
-    "mildest first, so they explain each other - and at 8 or 10 you are exploring a whole "
-    "stretch of the ladder in one run."
-)
-
-SIMPLE_DARING_INFO = (
-    "How far the boldest of them goes. Every step swaps in a different harmonic device "
-    "rather than piling on more notes - nothing on this dial is dissonant on purpose."
-)
 
 
 # =============================================================================
@@ -964,91 +1121,175 @@ SIMPLE_DARING_INFO = (
 # layout, the rest are strings and small helpers.
 
 UI_CSS = """
-.resizable textarea { resize: vertical !important; min-height: 12em; }
+.resizable textarea { resize: vertical !important; min-height: 9em; }
 
-/* The run bar is the only orange thing on the page, so the eye finds it first. */
-.runbar { border: 2px solid #f97316; border-radius: 10px; padding: 14px; }
-/* ...and Gradio nests the same div twice, so it was drawing that orange line
-   twice, one inside the other, with the padding doubled. */
-.runbar .runbar { border: none !important; padding: 0 !important; }
+/* ------------------------------------------------------------- the run bar
+   The only orange thing on the page, so the eye finds it first. It is a
+   Column, not a Group: a Group is drawn as a div inside a div, both carrying
+   the class, which is how 2.21 ended up with two orange frames and two yellow
+   ones, one inside the other. */
+.runbar {
+    border: 3px solid #f97316 !important;
+    border-radius: 12px !important;
+    padding: 14px 18px 12px 18px !important;
+    background: rgba(249, 115, 22, 0.05) !important;
+    gap: 12px !important;
+}
+.runrow { gap: 22px !important; align-items: stretch !important; }
+.namebar {
+    border: 2px solid #eab308 !important;
+    border-radius: 10px !important;
+    background: rgba(234, 179, 8, 0.08) !important;
+}
+.namebar textarea, .namebar input { font-size: 1.3em !important; padding: 10px 12px !important; }
+.namebar label > span, .namebar [data-testid="block-info"] { font-size: 1.05em !important; font-weight: 600 !important; }
+/* The Harmony Mutator still builds its run bar from Groups, which Gradio
+   nests twice: the inner copy is stripped so each frame is drawn once. */
+.runbar .runbar, .namebar .namebar {
+    border: none !important; padding: 0 !important; margin: 0 !important;
+    background: transparent !important; box-shadow: none !important;
+}
+.gorow { gap: 12px !important; flex-wrap: nowrap !important; }
+.gobtn { min-height: 100px !important; font-size: 1.25em !important; font-weight: 700 !important; border-radius: 10px !important; }
+.runhint p { margin: 4px 2px 0 2px !important; font-size: 0.93em; opacity: 0.85; }
+.runfoot { align-items: center !important; gap: 16px !important; }
+.runfoot p { margin: 0 !important; }
 
-/* Air between the name and the two buttons: they were touching, and a box
-   pressed against a button reads as one control rather than two. */
-.runbar > div > .row { gap: 22px !important; }
-.runbar button { margin-bottom: 10px; }
-.runbar .namebar { margin-right: 4px; }
+/* The two Finder buttons. In 2.21 they were small grey bars stretched across
+   the whole page, which read as a divider rather than as something to press. */
+.finderbtn {
+    background: #1e3a8a !important;
+    border: 1px solid #3b82f6 !important;
+    color: #eff6ff !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    padding: 8px 16px !important;
+    white-space: nowrap;
+    width: auto !important;
+    flex: 0 0 auto !important;
+    max-width: 100% !important;
+}
+.finderbtn:hover { background: #1d4ed8 !important; }
 
-/* Gradio renders a one-line Textbox as a <textarea>, so both have to be named
-   or the batch name quietly stays the same size as everything else. */
-.namebar textarea, .namebar input { font-size: 1.3em !important; padding: 12px 14px !important; }
-.namebar label > span { font-size: 1.05em !important; }
-
-/* Every setting is one row of a table: what it does on the left, the control
-   that does it on the right. The rule between rows is what keeps a long
-   column readable - without it the page is one undifferentiated wall. */
-.setting { border-bottom: 1px solid rgba(128,128,128,0.22); padding: 12px 0 14px 0; }
-.setting p { margin: 0.2em 0; }
-
-/* Section headings need air above them and none below: a heading belongs to
-   what follows it, not to what it interrupts. */
-.section { margin-top: 30px !important; margin-bottom: 0 !important; }
-.section h3 { font-size: 1.3em !important; }
-.section-note p { opacity: 0.8; margin-top: 0.2em !important; }
-
-/* On a narrow window Gradio does NOT stack these columns - it squeezes them,
-   and the explanation becomes a 220-pixel ribbon of eight short lines. Below
-   820 pixels the table is worth giving up: explanation above, control under.
-   Measured, not assumed: at 1000px it stays side by side, at 760px it stacks
-   with no horizontal scroll. */
-@media (max-width: 820px) {
-  .setting { flex-wrap: wrap !important; }
-  .setting > * { flex: 1 1 100% !important; min-width: 100% !important; }
+/* ------------------------------------------------------ start again from ...
+   Teal, framed, and at the top: the second way into the page after Generate,
+   and in 2.21 it looked like one more grey line. */
+.restore {
+    border: 2px solid #14b8a6 !important;
+    border-radius: 12px !important;
+    background: rgba(20, 184, 166, 0.07) !important;
+    margin-top: 14px !important;
+}
+.restore > button, .restore > .label-wrap, .restore button.label-wrap {
+    font-size: 1.08em !important; font-weight: 600 !important;
 }
 
-/* The way back up. It flashes the run bar on arrival, because landing at the
-   top of a long page without knowing what moved is its own small confusion. */
-.totop { margin-top: 18px; }
-.runbar.flash { box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.45); transition: box-shadow .2s; }
-
-/* The lyric tag buttons. Monospace because they insert literal text, and a
-   deep indigo because a row of seven grey buttons is a row of seven grey
-   buttons - the colour is what makes them read as one tool. */
-.tagbar { gap: 6px !important; margin-bottom: 4px; }
-.tagbar button {
-    font-family: ui-monospace, Menlo, monospace;
-    background: #312e81 !important;
-    border: 1px solid #4f46e5 !important;
-    color: #e0e7ff !important;
-}
-.tagbar button:hover { background: #4338ca !important; }
-
-/* Each big part of the page gets a thin coloured frame, the way the run bar
-   has its orange one. The colour is only there to say "this is one part" -
-   the eye finds a boundary faster than it reads a heading. */
+/* ---------------------------------------------------------- the big parts
+   Each part of the page has a coloured frame. 2px and nearly opaque since
+   2.22: at 1px and half-transparent they disappeared on a dark screen. */
 .part {
-    border: 1px solid rgba(128,128,128,0.35);
-    border-radius: 10px;
-    padding: 4px 16px 14px 16px;
-    margin-top: 24px !important;
+    border: 2px solid rgba(128, 128, 128, 0.6) !important;
+    border-radius: 12px !important;
+    padding: 0 !important;
+    margin-top: 26px !important;
     background: transparent !important;
+    overflow: hidden !important;
 }
-/* Gradio renders a Group as a div inside a div, BOTH carrying the class - so
-   the frame was being drawn twice, one inside the other, with the padding
-   doubled. Measured in the browser, not guessed. */
+/* Gradio renders a Group as a div inside a div, BOTH carrying the class, so
+   the inner one is stripped back to nothing. Measured in the browser. */
 .part .part {
     border: none !important;
     padding: 0 !important;
     margin-top: 0 !important;
     border-radius: 0 !important;
 }
-.part .section { margin-top: 14px !important; }
-.part-blue   { border-color: rgba(59,130,246,0.55); }
-.part-violet { border-color: rgba(139,92,246,0.55); }
-.part-green  { border-color: rgba(34,197,94,0.50); }
-.part-amber  { border-color: rgba(245,158,11,0.55); }
-.part-pink   { border-color: rgba(236,72,153,0.55); }
-.part-cyan   { border-color: rgba(6,182,212,0.55); }
-.part-slate  { border-color: rgba(100,116,139,0.55); }
+.part .section { margin-top: 0 !important; }
+.part .block.section { padding: 14px 16px 2px 16px !important; }
+.part-blue   { border-color: rgba(59, 130, 246, 0.9) !important; }
+.part-violet { border-color: rgba(139, 92, 246, 0.9) !important; }
+.part-green  { border-color: rgba(34, 197, 94, 0.85) !important; }
+.part-amber  { border-color: rgba(245, 158, 11, 0.9) !important; }
+.part-pink   { border-color: rgba(236, 72, 153, 0.9) !important; }
+.part-cyan   { border-color: rgba(6, 182, 212, 0.9) !important; }
+.part-slate  { border-color: rgba(100, 116, 139, 0.9) !important; }
+.part .part-blue, .part .part-violet, .part .part-green, .part .part-amber,
+.part .part-pink, .part .part-cyan, .part .part-slate { border: none !important; }
+
+.section { margin-top: 30px !important; margin-bottom: 0 !important; }
+.section h3 { font-size: 1.3em !important; }
+.section-note p { opacity: 0.8; margin-top: 0.2em !important; }
+
+/* ---------------------------------------------------- the settings table
+   What it does on the left, the control on the right. The left column gets
+   real padding: in 2.21 its text touched the edge of the grey band. */
+.setting { border-bottom: 1px solid rgba(128, 128, 128, 0.22); padding: 10px 0 12px 0; }
+.setting p { margin: 0.25em 0; }
+.explain { padding: 6px 22px 6px 20px !important; line-height: 1.5; }
+.explain p { margin: 0.35em 0 !important; }
+.readout p { margin: 6px 4px 0 4px !important; font-size: 0.95em; }
+.small p { font-size: 0.9em; opacity: 0.85; margin: 4px 4px 0 4px !important; }
+.block.readout, .block.small { padding: 4px 12px 8px 12px !important; }
+
+/* The three facts, between Words and Settings. */
+.block.goodtoknow {
+    border: none !important;
+    border-left: 5px solid #eab308 !important;
+    background: rgba(234, 179, 8, 0.08) !important;
+    border-radius: 10px !important;
+    padding: 6px 20px 10px 18px !important;
+    margin-top: 26px !important;
+}
+/* Gradio puts elem_classes on the block AND on the text inside it. */
+.prose.goodtoknow { border: none !important; background: transparent !important;
+                    padding: 0 !important; margin: 0 !important; }
+.goodtoknow h4 { margin: 6px 0 4px 0 !important; }
+.goodtoknow li { margin: 4px 0 !important; }
+
+/* Advanced: its own frame, dashed and grey, outside Settings - so it reads as
+   "optional, and apart", not as one more row of the table. */
+.advanced {
+    border: 2px dashed rgba(148, 163, 184, 0.85) !important;
+    border-radius: 12px !important;
+    background: rgba(148, 163, 184, 0.06) !important;
+    margin-top: 18px !important;
+}
+.advanced > button, .advanced > .label-wrap, .advanced button.label-wrap {
+    font-weight: 600 !important;
+}
+
+/* The lyric tag buttons: two columns, under the explanation, beside the box
+   they write into. Monospace because they type literal text. */
+.tagbar {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px !important;
+    margin-top: 8px;
+}
+.tagbar button {
+    font-family: ui-monospace, Menlo, monospace;
+    background: #312e81 !important;
+    border: 1px solid #4f46e5 !important;
+    color: #e0e7ff !important;
+    min-width: 0 !important;
+}
+.tagbar button:hover { background: #4338ca !important; }
+
+/* Inside a framed part, Gradio draws a player with a 3px white border. */
+.player { border: 1px solid rgba(128, 128, 128, 0.35) !important; }
+.block.scorenote { padding: 8px 16px 4px 16px !important; }
+
+.totop { margin-top: 18px; }
+.runbar.flash { box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.45); transition: box-shadow .2s; }
+
+/* On a narrow window Gradio does NOT stack columns - it squeezes them, and an
+   explanation becomes a ribbon of one-word lines. Below 820 pixels the table
+   is given up: explanation above, control under. */
+@media (max-width: 820px) {
+  .setting, .runrow { flex-wrap: wrap !important; }
+  .setting > *, .runrow > * { flex: 1 1 100% !important; min-width: 100% !important; }
+  .explain { padding: 4px 8px !important; }
+  .gobtn { min-height: 64px !important; }
+}
 """
 
 
@@ -1056,22 +1297,21 @@ def setting(title, info, factory, text_scale=2, control_scale=3):
     """One row of the settings table: explanation on the left, control on the
     right. Returns the control, so wiring elsewhere is unchanged."""
     with gr.Row(equal_height=True, elem_classes=["setting"]):
-        with gr.Column(scale=text_scale, min_width=0):
+        with gr.Column(scale=text_scale, min_width=0, elem_classes=["explain"]):
             gr.Markdown(f"**{title}**  \n{info}")
         with gr.Column(scale=control_scale, min_width=0):
             component = factory()
     return component
 
 
-def explain(title, info, text_scale=2, control_scale=3):
+def explain(title, info, text_scale=2, control_scale=3, equal_height=True):
     """The same row, opened by hand, for the settings that need TWO controls on
-    the right - metre and tempo, the file formats. Returns (row, column): fill
-    the column with `with col:` and close the row with row.__exit__(None, None,
-    None)."""
-    row = gr.Row(equal_height=True, elem_classes=["setting"])
+    the right. Returns (row, column): fill the column with `with col:` and
+    close the row with row.__exit__(None, None, None)."""
+    row = gr.Row(equal_height=equal_height, elem_classes=["setting"])
     row.__enter__()
-    with gr.Column(scale=text_scale, min_width=0):
-        gr.Markdown(f"**{title}**  \n{info}")
+    with gr.Column(scale=text_scale, min_width=0, elem_classes=["explain"]):
+        gr.Markdown(f"**{title}**  \n{info}" if title else info)
     col = gr.Column(scale=control_scale, min_width=0)
     return row, col
 
@@ -1100,7 +1340,7 @@ def close_sections():
         _OPEN_PARTS.pop().__exit__(None, None, None)
 
 
-TO_TOP_LABEL = "\N{UPWARDS BLACK ARROW}️  That is everything - take me back up to Generate"
+TO_TOP_LABEL = "\N{UPWARDS BLACK ARROW}\uFE0F  Back up to Generate"
 
 TO_TOP_JS = """() => {
   const bar = document.querySelector('.runbar');
@@ -1137,10 +1377,6 @@ def insert_tag_js(tag, elem_id):
     first, wiped the undo history of the whole box.
 
     The assignment is kept as a fallback for the day execCommand goes away.
-    Note which way round they are: if BOTH fail the box simply does not change,
-    which you can see. The failure that mattered was the opposite one - the tag
-    appearing on screen while Gradio never heard about it, and the render going
-    out untagged.
     """
     return """() => {
   const ta = document.querySelector('#__ID__ textarea');
@@ -1164,14 +1400,295 @@ def insert_tag_js(tag, elem_id):
 
 
 def tag_buttons(elem_id):
-    """The row of tag buttons that write into the textarea with this elem_id."""
-    gr.Markdown("*Click where you want a tag, then press its button. Paste the lyrics "
-                "first and tag them afterwards - that is what these are for.*")
-    with gr.Row(elem_classes=["tagbar"]):
+    """The tag buttons, two to a row, that write into the textarea with this
+    elem_id. The explanation is the caller's (see LYRICS_HOWTO)."""
+    with gr.Column(elem_classes=["tagbar"]):
         for tag in LYRIC_TAGS:
             gr.Button(f"[{tag}]", size="sm", variant="secondary",
-                      min_width=90).click(fn=None, inputs=None, outputs=None,
+                      min_width=0).click(fn=None, inputs=None, outputs=None,
                                           js=insert_tag_js(tag, elem_id))
+
+
+# ------------------------------------------------------ the shared page parts
+#
+# 2.22: the top half of YuMusic and of Spectrum is built HERE, once. Until
+# 2.21 each app carried its own copy of every paragraph, and they had already
+# drifted - YuMusic's daring text still talked about "Part 1" and a harmony
+# pass it does not have.
+
+MODEL_INFO = (
+    "**8-bit**: near bf16 quality, about twice as fast - use this one. **bf16**: the "
+    "reference, slowest. **4-bit**: fastest, a little less precise. Only the variants "
+    "you have downloaded are listed."
+)
+
+PLANNING_INFO = (
+    "Keep **Melody + chords**: it is the score that Harmonic daring acts on{extra}. "
+    "*Melody only* writes no chords. *None* goes straight to sound - no score to see or "
+    "export, and the daring does nothing."
+)
+
+SCORE_FILE_INFO = (
+    "Renders this `.abc` instead of writing a new score - for a score you edited by hand. "
+    "Harmonic daring does nothing then: the score already exists."
+)
+
+REFINE_DEFAULT = 32                 # the model's own ode_steps, all three variants
+REFINE_INFO = (
+    "How many passes turn the planned sound into audio. **32 is the model's own "
+    "setting** - leave it there. 16 is faster and may sound rougher; 64 takes about a "
+    "third longer (estimated) for a difference you are unlikely to hear."
+)
+
+FORMATS_INFO = (
+    "The .wav, the .abc score and the .txt of settings are always saved. These add copies "
+    "beside them. " + MIDI_INFO
+)
+
+RESTORE_INTRO = (
+    "Drop **any file of a track you made** - the .wav, .mp3, .txt, the score, the MIDI - "
+    "and every setting on this page goes back to what made it{extra}. Change what you want, "
+    "then press Generate."
+)
+
+
+def run_bar():
+    """The run bar: progress, the batch name, Generate and Stop, the estimate,
+    and the button to the run's folder. Returns its components by name."""
+    W = {}
+    with gr.Column(elem_classes=["runbar"]):
+        W["progress_bar"] = gr.HTML(IDLE_PROGRESS)
+        with gr.Row(equal_height=False, elem_classes=["runrow"]):
+            with gr.Column(scale=3, min_width=280):
+                W["batch_name"] = gr.Textbox(
+                    value="", label="\N{PUSHPIN} Batch name", lines=1, max_lines=1,
+                    placeholder="e.g. glass-piano-night-2", elem_classes=["namebar"])
+                gr.Markdown(f"*{BATCH_NAME_HEADER}*", elem_classes=["runhint"])
+            with gr.Column(scale=2, min_width=280):
+                with gr.Row(elem_classes=["gorow"]):
+                    W["generate_btn"] = gr.Button("▶︎  Generate", variant="primary",
+                                                  scale=3, min_width=150,
+                                                  elem_classes=["gobtn"])
+                    W["stop_btn"] = gr.Button("■︎  Stop", variant="stop", scale=1,
+                                              min_width=100, elem_classes=["gobtn"])
+                W["estimate"] = gr.Markdown(estimate_batch(1, 120, "8bit", 1.0),
+                                            elem_classes=["runhint"])
+        with gr.Row(equal_height=True, elem_classes=["runfoot"]):
+            W["open_run_btn"] = gr.Button(OPEN_RUN_LABEL, scale=0, min_width=0,
+                                          elem_classes=["finderbtn"])
+            with gr.Column(scale=1, min_width=0):
+                W["name_warning"] = gr.Markdown("**Name this run before you start.**")
+                W["seed_warning"] = gr.Markdown("")
+                # Markdown, not a Textbox: an empty Textbox draws an empty grey box
+                # that looks like a control you have failed to fill in.
+                W["status_out"] = gr.Markdown("")
+    return W
+
+
+def restore_box(spectrum=False):
+    """The "start again from a track" drop zone. Returns (file, note)."""
+    with gr.Accordion("\N{CLOCKWISE RIGHTWARDS AND LEFTWARDS OPEN CIRCLE ARROWS}  Start "
+                      "again from a track you already made", open=False,
+                      elem_classes=["restore"]):
+        gr.Markdown(RESTORE_INTRO.format(
+            extra=" - the harmony pass too, if you drop a harmonised version"
+            if spectrum else ""))
+        types = [".txt", ".wav", ".mp3", ".flac", ".abc", ".mid"] + ([".npy"] if spectrum else [])
+        restore_file = gr.File(label="Drop a track here (any of its files)", file_types=types,
+                               height=130)
+        restore_note = gr.Markdown("")
+    return restore_file, restore_note
+
+
+def model_section():
+    section("\N{BRAIN} The model", colour="blue")
+    labels = available_variants()
+    return setting(
+        "Model variant", MODEL_INFO,
+        lambda: gr.Dropdown(choices=labels or list(MODEL_VARIANTS),
+                            value=default_variant(labels),
+                            label="Model variant", show_label=False))
+
+
+def words_section(lyrics_id):
+    """Style (with the optional drafter) and Lyrics (with the tag buttons), each
+    as a two-column row, then Instrumental. Returns the components by name."""
+    section("\N{MEMO} Words", colour="violet")
+    W = {}
+    with gr.Row(equal_height=False, elem_classes=["setting"]):
+        with gr.Column(scale=2, min_width=0, elem_classes=["explain"]):
+            gr.Markdown(STYLE_HOWTO)
+        with gr.Column(scale=3, min_width=0):
+            W["style"] = gr.Textbox(
+                label="Style prompt", show_label=False, lines=7, elem_classes=["resizable"],
+                placeholder="Style prompt - for example:  Dream pop, {female alto|male "
+                            "tenor}, shimmering guitars, slow 4/4, 80 BPM, wistful")
+            W["style_note"] = gr.Markdown(prompt_mode_note("Style", ""), elem_classes=["small"])
+            choices = draft_choices()
+            with gr.Accordion("\N{SPARKLES} Draft it from a rough idea (optional, local "
+                              "model)", open=False):
+                if choices:
+                    gr.Markdown(DRAFT_INTRO)
+                    with gr.Row(equal_height=True):
+                        W["idea"] = gr.Textbox(label="Rough idea", lines=2, scale=3,
+                                               placeholder="a sad the cure track, slow, "
+                                                           "with choir at the end")
+                        with gr.Column(scale=2, min_width=160):
+                            W["draft_model"] = gr.Dropdown(choices, value=choices[0],
+                                                           label="Local model")
+                            W["draft_btn"] = gr.Button("Write the style prompt",
+                                                       variant="secondary")
+                    W["draft_note"] = gr.Markdown("")
+                else:
+                    gr.Markdown(DRAFT_MISSING)
+                    W["idea"] = gr.Textbox(visible=False)
+                    W["draft_model"] = gr.Dropdown(visible=False)
+                    W["draft_btn"] = gr.Button(visible=False)
+                    W["draft_note"] = gr.Markdown(visible=False)
+    with gr.Row(equal_height=False, elem_classes=["setting"]):
+        with gr.Column(scale=2, min_width=0, elem_classes=["explain"]):
+            gr.Markdown(LYRICS_HOWTO)
+            tag_buttons(lyrics_id)
+        with gr.Column(scale=3, min_width=0):
+            W["lyrics"] = gr.Textbox(label="Lyrics", show_label=False, lines=11,
+                                     elem_id=lyrics_id, elem_classes=["resizable"],
+                                     placeholder="Lyrics - for example:\n[Verse]\n...\n"
+                                                 "[Chorus]\n...")
+            W["lyrics_note"] = gr.Markdown(prompt_mode_note("Lyrics", ""),
+                                           elem_classes=["small"])
+    row, col = explain("Instrumental", INSTRUMENTAL_INFO)
+    with col:
+        W["instrumental"] = gr.Checkbox(value=False, label="No voices at all")
+        W["instrumental_note"] = gr.Markdown("", elem_classes=["small"])
+    row.__exit__(None, None, None)
+    return W
+
+
+def settings_section(spectrum=False):
+    """Good to know, then Settings: length, seed, metre, rhythm, daring."""
+    close_sections()
+    gr.Markdown(good_to_know(spectrum), elem_classes=["goodtoknow"])
+    section("\N{WRENCH} Settings", colour="green")
+    W = {}
+    row, col = explain("Length", LENGTH_INFO)
+    with col:
+        W["duration_s"] = gr.Number(value=120, precision=0,
+                                    label="Target duration, in seconds (max 360)")
+        W["fit_label"] = gr.Radio(list(FIT_CHOICES), value=DEFAULT_FIT,
+                                  label="When the score is longer than the duration")
+        gr.Markdown(FIT_INFO_NOTE, elem_classes=["small"])
+    row.__exit__(None, None, None)
+
+    row, col = explain(SEED_TITLE, SEED_INFO)
+    with col:
+        W["track_seed"] = gr.Number(value=-1, precision=0, label="Seed (-1 = random)")
+        W["vary_seed"] = gr.Checkbox(value=True,
+                                     label="Add 1 to a fixed seed for each extra track")
+    row.__exit__(None, None, None)
+
+    row, col = explain("Metre and tempo", METER_INFO)
+    with col:
+        W["meter_label"] = gr.Dropdown(list(METERS), value=DEFAULT_METER, label="Metre")
+        W["tempo"] = gr.Number(value=0, precision=0, label="Tempo in BPM (0 = the model decides)")
+    row.__exit__(None, None, None)
+
+    row, col = explain("Rhythmic complexity", RHYTHM_INFO)
+    with col:
+        W["rhythm"] = gr.Slider(0, 5, value=0, step=1, label="Rhythmic complexity",
+                                show_label=False)
+        W["rhythm_note"] = gr.Markdown(rhythm_note(0), elem_classes=["readout"])
+    row.__exit__(None, None, None)
+
+    row, col = explain(DARING_TITLE, DARING_INFO_SPECTRUM if spectrum else DARING_INFO)
+    with col:
+        W["daring"] = gr.Slider(0, 10, value=DARING_DEFAULT, step=1, label=DARING_TITLE,
+                                show_label=False)
+        W["daring_readout"] = gr.Markdown(daring_meaning(DARING_DEFAULT),
+                                          elem_classes=["readout"])
+    row.__exit__(None, None, None)
+    return W
+
+
+def advanced_block(spectrum=False):
+    """Advanced, in its own dashed frame after Settings."""
+    close_sections()
+    W = {}
+    with gr.Accordion("\N{TEST TUBE}  Advanced - leave alone until everything else is "
+                      "settled", open=False, elem_classes=["advanced"]):
+        W["style_strength"] = setting(
+            STYLE_STRENGTH_TITLE, STYLE_STRENGTH_INFO,
+            lambda: gr.Slider(1.0, 3.0, value=1.0, step=0.1, label=STYLE_STRENGTH_TITLE,
+                              show_label=False))
+        W["planning_label"] = setting(
+            "Score planning",
+            PLANNING_INFO.format(extra=", and what the harmony pass needs" if spectrum else ""),
+            lambda: gr.Radio(list(SCORE_PLANNING), value=DEFAULT_PLANNING,
+                             label="Score planning", show_label=False))
+        W["score_file"] = setting(
+            "Start from an existing score", SCORE_FILE_INFO,
+            lambda: gr.File(label="Score (.abc)", file_types=[".abc", ".txt"],
+                            show_label=False, height=110))
+        W["refine_steps"] = setting(
+            "Audio refinement steps", REFINE_INFO,
+            lambda: gr.Slider(8, 96, value=REFINE_DEFAULT, step=4,
+                              label="Audio refinement steps", show_label=False))
+    return W
+
+
+def to_top_button():
+    gr.Button(TO_TOP_LABEL, variant="secondary", elem_classes=["totop"]).click(
+        fn=None, inputs=None, outputs=None, js=TO_TOP_JS)
+
+
+def refine_arg(steps):
+    """The --steps to pass: None at the model's own 32, so a track made at the
+    default is rendered exactly as before 2.22."""
+    try:
+        n = int(steps)
+    except (TypeError, ValueError):
+        return None
+    return None if n == REFINE_DEFAULT or n <= 0 else n
+
+
+def wire_words_and_settings(W, PROMPT, num_tracks):
+    """Every small readout on the shared parts. W is the merged dict of
+    run_bar(), words_section() and settings_section()."""
+    W["daring"].change(daring_meaning, inputs=W["daring"], outputs=W["daring_readout"], **QUIET)
+    W["rhythm"].change(rhythm_note, inputs=W["rhythm"], outputs=W["rhythm_note"], **QUIET)
+    W["style"].change(lambda v: (PROMPT.edit("style", v), prompt_mode_note("Style", v))[1],
+                      inputs=W["style"], outputs=W["style_note"], **QUIET)
+    W["lyrics"].change(lambda v: (PROMPT.edit("lyrics", v), prompt_mode_note("Lyrics", v))[1],
+                       inputs=W["lyrics"], outputs=W["lyrics_note"], **QUIET)
+    for c in (W["style"], W["instrumental"]):
+        c.change(instrumental_note, inputs=[W["style"], W["instrumental"]],
+                 outputs=W["instrumental_note"], **QUIET)
+    W["draft_btn"].click(draft_style, inputs=[W["idea"], W["draft_model"]],
+                         outputs=[W["style"], W["draft_note"]])
+    W["batch_name"].change(
+        lambda v: "" if safe_name(v) else "**Name this run before you start.**",
+        inputs=W["batch_name"], outputs=W["name_warning"], **QUIET)
+    for c in (W["track_seed"], W["vary_seed"], num_tracks):
+        c.change(seed_note, inputs=[W["track_seed"], W["vary_seed"], num_tracks],
+                 outputs=W["seed_warning"], **QUIET)
+
+
+def score_lines(info):
+    """What the renderer measured, as lines for the .txt beside the track."""
+    if not info or not info.get("bars"):
+        return []
+    import score_length as SL
+    line = (f"Score: {info['bars']} bars, about {SL.clock(info['seconds'])} at "
+            f"{info.get('bpm', '?')} BPM")
+    if info.get("original_bars"):
+        line += (f" (shortened from {info['original_bars']} bars, "
+                 f"{SL.clock(info['original_seconds'])})")
+    if info.get("audio_seconds") and info["bars"]:
+        pct = min(100, round(100 * info["heard_bars"] / info["bars"]))
+        line += f"; heard {SL.clock(info['audio_seconds'])} = {pct}% of it"
+    return [line]
+
+
+SCORE_NOTE_IDLE = "*After each track: how long its score is, and how much of it you heard.*"
 
 
 # ----------------------------------------------------- Gradio's own rubbish --
@@ -1289,6 +1806,18 @@ REVEAL_LABEL = "\N{OPEN FILE FOLDER} Show the track playing, in the Finder"
 # So every control also writes its value here as you move it, and each track
 # reads from here instead of from the arguments the run was launched with.
 
+# Small page updates - a readout, a warning, the estimate, a live setting -
+# skip the queue and show no spinner. Queued, they could wait behind a running
+# batch and sat there with a spinning "0.0s" beside them (seen on 23 September).
+QUIET = {"show_progress": "hidden", "queue": False}
+
+
+def short(text, n=40):
+    """A prompt on one line, cut to n characters - for the Log."""
+    one = " ".join((text or "").split())
+    return f"'{one[:n]}...'" if len(one) > n else f"'{one}'"
+
+
 class LiveSettings:
     """One per app. The names must match the generate() parameter names: that
     is what makes seed(locals()) and now() agree about what a setting is
@@ -1311,7 +1840,7 @@ class LiveSettings:
         time."""
         for name, component in mapping.items():
             component.change(lambda v, k=name: self.values.__setitem__(k, v),
-                             inputs=component)
+                             inputs=component, **QUIET)
 
     @staticmethod
     def changes(previous, current):
@@ -1326,30 +1855,31 @@ class LiveSettings:
 
 
 FROZEN_NOTE = (
-    "Two things are frozen once you press Generate, because they decide the shape of the "
-    "run rather than of a track: the **number of tracks** and the **batch name**."
+    "Only the **number of tracks** and the **batch name** are fixed when you press Generate."
 )
 
 LIVE_NOTE = (
-    "**Everything on this page stays live while a batch runs.** Change the Style, the "
-    "Lyrics, the duration, the metre, the daring - even the model - during track 3, and "
-    "**track 4 obeys**. The track in flight is never disturbed, nothing has to be "
-    "stopped, and the Log writes down what moved and when."
+    "**Everything on this page stays live during a batch.** Change a setting during track "
+    "3 and track 4 uses it; the track being made is never disturbed."
 )
 
-STYLE_HOWTO = (
-    "**How to write a style prompt.** A list of concrete musical facts, separated by "
-    "commas - not sentences, and not a pile of adjectives. Roughly in this order: "
-    "**genre**, era or aesthetic, **vocal character**, **instruments**, rhythmic "
-    "character, harmonic language, production, approximate tempo, mood.\n\n"
-    "> Dark synth-pop, restrained female alto, dry close vocal, analog polysynths, "
-    "sequenced bass, sparse electronic drums, minor-key harmony, slow 4/4 pulse around "
-    "105 BPM, cool nocturnal production, gradual accumulation of layers.\n\n"
-    '*"Beautiful, emotional, amazing" tells the model nothing it can play. "Restrained '
-    'female alto, dry close vocal" tells it exactly what to do. And keep musical '
-    "direction here: the Lyrics box is for words that get sung, so an instruction "
-    "written in it will be sung out loud.*"
-)
+
+def good_to_know(spectrum=False):
+    """The three facts that change how the page is used, once, above Settings.
+    Written on 23 September 2026, the morning the first one was discovered."""
+    live = LIVE_NOTE + " " + FROZEN_NOTE
+    if spectrum:
+        live += " The harmony pass is live too."
+    return (
+        "#### \N{ELECTRIC LIGHT BULB} Three things worth knowing\n"
+        "1. **The duration does not make the music shorter.** The model writes a whole "
+        "piece first - usually 2 to 3 minutes - and the duration only says where the sound "
+        "stops. At 30 s you hear the intro. *Length*, below, lets you choose.\n"
+        "2. **Harmonic daring is the harmony control.** It acts while the score is "
+        "written, melody and chords together, so its chords fit the melody." + (" The "
+        "harmony pass has its own, separate daring." if spectrum else "")
+        + "\n3. " + live
+    )
 
 
 # -------------------------------------------------------- the style drafter --
@@ -1413,25 +1943,17 @@ DRAFT_SHOTS = [
 DRAFT_PREFERRED = ["gemma2:9b", "mistral:7b", "qwen3.5:4b", "gemma2", "mistral"]
 
 DRAFT_INTRO = (
-    "Type the idea however it comes - *a sad the cure track, slow, with choir at the "
-    "end* - and a model on **your own machine** turns it into the list of musical facts "
-    "above. Nothing leaves the Mac.\n\n"
-    "Its real use is **references**: YuE2 does not know who The Cure are, but it knows "
-    "what *post-punk, melancholic male baritone, echoing electric guitar, "
-    "reverb-drenched production* means. That translation is the whole point.\n\n"
-    "*Measured here: `gemma2:9b` got it right three times out of three in about 1.7 "
-    "seconds. Anything under 7B did not know the reference and invented a different "
-    "band - that is knowledge, not wording, so no amount of instruction fixes it. Draft "
-    "BEFORE you press Generate: during a render the two models compete for the same "
-    "memory.*"
+    "Type a rough idea, even with a band name - *a sad Cure track, slow, choir at the "
+    "end*. A model on **this Mac** (Ollama) turns it into musical facts YuE2 understands. "
+    "Nothing leaves the Mac.  \n"
+    "*Use gemma2:9b - smaller models do not know the references and invent another band. "
+    "Draft before Generate: during a render both models share the memory.*"
 )
 
 DRAFT_MISSING = (
-    "**This is the one optional thing on the page, and it is not installed.**\n\n"
-    "It needs [Ollama](https://ollama.com) running locally. Everything else works "
-    "perfectly without it - this only drafts a starting point you would otherwise type "
-    "yourself.\n\n"
-    "To have it: install Ollama, then `ollama pull gemma2:9b` once."
+    "**Optional, and not installed.** This needs [Ollama](https://ollama.com) running on "
+    "the Mac: install it, then run `ollama pull gemma2:9b` once. Everything else works "
+    "without it."
 )
 
 
@@ -1485,7 +2007,5 @@ def draft_style(idea, model):
     if not line:
         return gr.update(), "*The model returned nothing. Try again, or another model.*"
     return gr.update(value=line), (
-        f"**Read it before you use it.** {model} took {time.time() - started:.1f} s, and "
-        f"it invented the parts you did not specify - the tempo, the bass, the drum "
-        f"character. That is the job, but they are its guesses, not yours. Edit the box "
-        f"above freely; nothing is sent until you press Generate.")
+        f"**Read it before you use it** ({model}, {time.time() - started:.1f} s). What you "
+        f"did not specify - tempo, bass, drums - is its guess, not yours. Edit freely.")

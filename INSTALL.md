@@ -309,6 +309,19 @@ most drives are formatted as when you buy them.
 
 ---
 
+## 🔄 Updating to a new version
+
+**If you used git:** open Terminal in the folder and type `git pull`.
+
+**If you used the ZIP:** your renders are saved inside the app's own folder,
+in `outputs`. **Move that `outputs` folder somewhere safe first**, then
+download the new ZIP, unpack it, redo step 5️⃣ (the launcher's permission),
+and put `outputs` back inside if you like.
+
+Every earlier version stays downloadable from the
+[Tags](https://github.com/Quick-Eyed-Sky/yumusic-mac-mlx/tags) page (each one has
+its own ZIP).
+
 ## 🗑️ Removing all of this
 
 Delete the folder `~/YuE` and the folder you unzipped this into. That is

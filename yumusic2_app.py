@@ -28,6 +28,17 @@ New in 2.1:
   - Slider explanations sit above their slider, so the value box stays next to
     the track.
 
+New in 2.22:
+  - Length: the model always writes a whole piece and the duration only cut
+    the sound. The page now says, after every track, how long the score was
+    and how much of it was heard - and a new choice decides what happens when
+    the score is longer: stop the sound (as before), shorten the score to end
+    at a section boundary, or play the whole score.
+  - Harmonic daring shows what to expect, measured on 181 tracks, instead of
+    the sampling numbers behind it. Style strength is renamed Style-prompt
+    fidelity and moved to Advanced until it has been tested.
+  - The top half of the page is built by yue_common, shared with Spectrum.
+
 Run:  python3 yumusic2_app.py        (or double-click launch_yumusic2.command)
 Port: 7870 by default, override with YUMUSIC2_PORT.
 """
@@ -48,6 +59,7 @@ import gradio as gr
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import yue_common as C
+import score_length as SL
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = SCRIPT_DIR / "outputs"
@@ -76,20 +88,21 @@ def render_score_svg(abc_path):
         return f'<div style="overflow-x:auto">{svg[start:]}</div>' if start != -1 else None
 
 
-def generate(variant_label, style, lyrics, instrumental, duration_s, meter_label, tempo, rhythm,
-             daring, style_strength, planning_label, score_file,
+def generate(variant_label, style, lyrics, instrumental, duration_s, fit_label, meter_label,
+             tempo, rhythm, daring, style_strength, planning_label, score_file,
              track_seed, vary_seed, refine_steps,
              num_tracks, batch_name, save_mp3, save_flac, save_midi):
     STOP.clear()
     log, files = [], []
     last_audio, prompt_text, score_html = None, "", ""
+    score_md = C.SCORE_NOTE_IDLE
     bar = C.IDLE_PROGRESS
     warned = {"done": False}
     midi_warned = {"done": False}
 
     def out():
         return (last_audio, prompt_text, "\n".join(files),
-                "\n".join(log[-300:]), score_html, bar)
+                "\n".join(log[-300:]), score_html, bar, score_md)
 
     def tick():
         nonlocal bar
@@ -150,7 +163,8 @@ def generate(variant_label, style, lyrics, instrumental, duration_s, meter_label
     PROG.reset(n)
     tick()
     log.append(f"Saving to: {RUN_DIR}")
-    log.append(C.estimate_batch(n, duration_s, variant, style_strength) + "\n")
+    log.append(C.estimate_batch(n, duration_s, variant, style_strength,
+                                C.fit_mode(fit_label)).replace("**", "") + "\n")
     yield out()
 
     for i in range(n):
@@ -168,6 +182,8 @@ def generate(variant_label, style, lyrics, instrumental, duration_s, meter_label
         instrumental = LIVE.now("instrumental", instrumental)
         duration_s = LIVE.now("duration_s", duration_s)
         max_frames = C.frames_from_duration(duration_s)
+        fit_label = LIVE.now("fit_label", fit_label)
+        fit = C.fit_mode(fit_label)
         meter_label = LIVE.now("meter_label", meter_label)
         tempo = LIVE.now("tempo", tempo)
         rhythm = LIVE.now("rhythm", rhythm)
@@ -188,13 +204,18 @@ def generate(variant_label, style, lyrics, instrumental, duration_s, meter_label
         live_state = {
             "model": variant_label,
             "duration (s)": int(duration_s or 0),
+            "score longer than the duration": fit,
             "metre": meter_label,
             "tempo": int(tempo or 0),
             "rhythmic complexity": int(rhythm),
             "harmonic daring": int(daring),
-            "style strength": round(float(style_strength), 2),
+            "style-prompt fidelity": round(float(style_strength), 2),
             "score planning": planning_label,
             "instrumental": bool(instrumental),
+            "refinement steps": int(refine_steps or C.REFINE_DEFAULT),
+            # The words, shortened: enough for the Log to say they were edited.
+            "style prompt": C.short(PROMPT.text.get("style", "")),
+            "lyrics": C.short(PROMPT.text.get("lyrics", "")),
         }
         moved = C.LiveSettings.changes(live_prev, live_state)
         if moved:
@@ -228,15 +249,23 @@ def generate(variant_label, style, lyrics, instrumental, duration_s, meter_label
         cmd = C.render_command(model_path=model_path, style=track_style, lyrics_file=lyr,
                                 out_path=wav, seed=seed, planning=planning,
                                 abc_file=score_file, cfg_scale=style_strength,
-                                steps=refine_steps, max_frames=max_frames, daring=daring,
-                                abc_prefix_file=prefix_file)
+                                steps=C.refine_arg(refine_steps), max_frames=max_frames,
+                                daring=daring, abc_prefix_file=prefix_file, fit=fit)
 
         PROG.begin(f"track {i + 1}/{n}", max_frames)
         tick()
         log.append(f"=== Track {i + 1}/{n} - seed {seed} ===")
         yield out()
 
+        score_info = None
         for line in STOP.run(cmd, C.REPO_DIR):
+            data = SL.read_data_line(line)
+            if data is not None:
+                score_info = data          # the machine line stays out of the Log
+                continue
+            if line.startswith("[score-frames]"):
+                PROG.frames = int(line.split()[1])
+                continue
             log.append(line)
             PROG.note_line(line)
             tick()
@@ -265,10 +294,12 @@ def generate(variant_label, style, lyrics, instrumental, duration_s, meter_label
             f"Harmonic daring: {daring} (temperature {t:.3f}, top_p {p:.3f}, top_k {k})",
             f"Style strength (CFG): {style_strength}",
             f"Target duration (s): {int(duration_s) if duration_s else '(model default)'}",
+            f"Score fit: {fit}",
             f"Metre: {meter or 'model default'}"
             + (f", tempo {int(tempo)}" if tempo and int(tempo) > 0 else ""),
             f"Rhythmic complexity: {int(rhythm)}",
-        ])
+            f"Audio refinement steps: {int(refine_steps or C.REFINE_DEFAULT)}",
+        ] + C.score_lines(score_info))
 
         abc = wav.with_suffix(".abc")
         extra, warn = C.convert_audio(wav, save_mp3, save_flac)
@@ -291,6 +322,7 @@ def generate(variant_label, style, lyrics, instrumental, duration_s, meter_label
         else:
             score_html = "<p><em>No score for this track (score planning was off).</em></p>"
 
+        score_md = SL.describe(score_info) or "*No score to measure for this track.*"
         last_audio = str(wav)
         files.append(str(wav))
         files.extend(str(p) for p in extra)
@@ -306,8 +338,8 @@ def generate(variant_label, style, lyrics, instrumental, duration_s, meter_label
     yield out()
 
 
-# The look of the page, the settings table, the lyric tag buttons and the style
-# drafter all live in yue_common now, so the three apps cannot drift apart.
+# The look of the page and every part of its top half live in yue_common, so
+# YuMusic and Spectrum cannot drift apart.
 CSS = C.UI_CSS
 setting, explain, section = C.setting, C.explain, C.section
 
@@ -316,7 +348,7 @@ setting, explain, section = C.setting, C.explain, C.section
 # Number of tracks and Batch name are absent on purpose - they decide the shape
 # of the run, not of a track.
 LIVE = C.LiveSettings([
-    "variant_label", "instrumental", "duration_s", "meter_label", "tempo",
+    "variant_label", "instrumental", "duration_s", "fit_label", "meter_label", "tempo",
     "rhythm", "daring", "style_strength", "planning_label", "score_file",
     "track_seed", "vary_seed", "refine_steps",
     "save_mp3", "save_flac", "save_midi",
@@ -327,251 +359,63 @@ LIVE = C.LiveSettings([
 # temporary folder, and never tidies up on its own: three days of batches left
 # 384 wav copies and 6.8 GB behind. delete_cache says "every hour, throw away
 # copies older than six" - six because a player still on screen points at its
-# cached copy, and deleting that from under it would 404 a track you were about
-# to replay. Restarting the app clears the whole cache outright, which is
-# Gradio's own documented behaviour.
+# cached copy. Restarting the app clears the whole cache outright.
 with gr.Blocks(title="YuMusic 2", delete_cache=(3600, 21600)) as demo:
     gr.Markdown(C.app_header(
         "YuMusic",
-        f"Lyrics + style into a song, locally, with the score-planning stage opened up. "
-        f"Tracks are saved to `{OUTPUT_DIR}`."))
+        f"Style + lyrics into a song, on this Mac. Tracks are saved in `{OUTPUT_DIR}`."))
 
-    # ------------------------------------------------------------- the run bar
-    #
-    # Two columns on purpose: the name of the run on the left, because that is
-    # what gets forgotten, and the two buttons on the right where the hand
-    # already is. The progress bar spans both - it belongs to the whole run,
-    # not to either column.
-    with gr.Group(elem_classes=["runbar"]):
-        progress_bar = gr.HTML(C.IDLE_PROGRESS)
-        with gr.Row(equal_height=True):
-            with gr.Column(scale=3, min_width=0):
-                with gr.Group(elem_classes=["namebar"]):
-                    batch_name = gr.Textbox(
-                        value="", label="\N{PUSHPIN} Batch name",
-                        placeholder="e.g. glass-piano-night-2")
-                gr.Markdown(f"*{C.BATCH_NAME_HEADER}*")
-            with gr.Column(scale=2, min_width=0):
-                generate_btn = gr.Button("Generate", variant="primary")
-                stop_btn = gr.Button("Stop", variant="stop")
-                estimate = gr.Markdown(C.estimate_batch(1, 120, "8bit", 1.0))
-        with gr.Row():
-            open_run_btn = gr.Button(C.OPEN_RUN_LABEL, size="sm", variant="secondary")
-        name_warning = gr.Markdown("**Name this run before you start.**")
-        seed_warning = gr.Markdown("")
-        # Markdown, not a Textbox: an empty Textbox draws an empty grey box that
-        # looks like a control you have failed to fill in. Empty Markdown draws
-        # nothing at all, which is the honest rendering of "no status yet".
-        status_out = gr.Markdown("")
+    R = C.run_bar()
+    progress_bar, batch_name = R["progress_bar"], R["batch_name"]
+    generate_btn, stop_btn, estimate = R["generate_btn"], R["stop_btn"], R["estimate"]
+    status_out = R["status_out"]
 
-    with gr.Accordion("Start again from a track you already made", open=False):
-        gr.Markdown(
-            "Drop **any file belonging to a track** - the `.txt`, the `.wav`, the `.mp3`, "
-            "the score - and every control goes back to what made it. Change what you want "
-            "and press Generate.\n\n"
-            "*The seed is what reproduces the piece: leave it alone and raise the duration, "
-            "and you get the same composition, longer.*")
-        restore_file = gr.File(label="Drop a track (any of its files)",
-                                file_types=[".txt", ".wav", ".mp3", ".flac", ".abc", ".mid"])
-        restore_note = gr.Markdown("")
+    restore_file, restore_note = C.restore_box()
 
-    # ---------------------------------------------------------------- the model
-    section("\N{BRAIN} The model", colour="blue")
-    _labels = C.available_variants()
-    variant_label = setting(
-        "Model variant",
-        "8-bit is the one to use: near bf16 quality and about twice as fast. bf16 is the "
-        "reference and the slowest. 4-bit is fastest and drifts. Only the variants actually "
-        "downloaded are listed.",
-        lambda: gr.Dropdown(choices=_labels or list(C.MODEL_VARIANTS),
-                            value=C.default_variant(_labels),
-                            label="Model variant", show_label=False))
+    variant_label = C.model_section()
 
-    # ----------------------------------------------------------------- the words
-    section("\N{MEMO} Words", C.PROMPT_HELP, colour="violet")
+    WD = C.words_section("yum_lyrics")
+    style, lyrics, instrumental = WD["style"], WD["lyrics"], WD["instrumental"]
 
-    gr.Markdown(
-        "**Everything on this page stays live while a batch runs.** Change the Style, the "
-        "Lyrics, the duration, the metre, the daring - even the model - during track 3, and "
-        "**track 4 obeys**. The track in flight is never disturbed, nothing has to be "
-        "stopped, and the Log writes down what moved and when.\n\n"
-        "*That is what a ten-track run is for: three short ones to hear where it is going, "
-        "then lengthen the duration and rework the words as you learn what the piece wants. "
-        "Two things are frozen once you press Generate, because they decide the shape of the "
-        "run rather than of a track: the **number of tracks** and the **batch name**.*")
+    S = C.settings_section()
+    duration_s, fit_label = S["duration_s"], S["fit_label"]
+    track_seed, vary_seed = S["track_seed"], S["vary_seed"]
+    meter_label, tempo, rhythm, daring = S["meter_label"], S["tempo"], S["rhythm"], S["daring"]
 
-    gr.Markdown(
-        "**How to write a style prompt.** A list of concrete musical facts, separated by "
-        "commas - not sentences, and not a pile of adjectives. Roughly in this order: "
-        "**genre**, era or aesthetic, **vocal character**, **instruments**, rhythmic "
-        "character, harmonic language, production, approximate tempo, mood.\n\n"
-        "> Dark synth-pop, restrained female alto, dry close vocal, analog polysynths, "
-        "sequenced bass, sparse electronic drums, minor-key harmony, slow 4/4 pulse around "
-        "105 BPM, cool nocturnal production, gradual accumulation of layers.\n\n"
-        "*\"Beautiful, emotional, amazing\" tells the model nothing it can play. "
-        "\"Restrained female alto, dry close vocal\" tells it exactly what to do. And keep "
-        "musical direction here: the Lyrics box is for words that get sung, so an "
-        "instruction written in it will be sung out loud.*")
-
-    _choices = C.draft_choices()
-    with gr.Accordion("\N{SPARKLES} Or let a local model draft one for you "
-                      "(optional)", open=False):
-        if _choices:
-            gr.Markdown(
-                "Type the idea however it comes - *a sad the cure track, slow, with choir "
-                "at the end* - and a model on **your own machine** turns it into the list "
-                "of musical facts above. Nothing leaves the Mac.\n\n"
-                "Its real use is **references**: YuE2 does not know who The Cure are, but "
-                "it knows what *post-punk, melancholic male baritone, echoing electric "
-                "guitar, reverb-drenched production* means. That translation is the whole "
-                "point.\n\n"
-                "*Measured here: `gemma2:9b` got it right three times out of three in "
-                "about 1.7 seconds. Anything under 7B did not know the reference and "
-                "invented a different band - that is knowledge, not wording, so no amount "
-                "of instruction fixes it. Draft BEFORE you press Generate: during a render "
-                "the two models compete for the same memory.*")
-            with gr.Row(equal_height=True):
-                idea = gr.Textbox(label="Rough idea", lines=2, scale=3,
-                                  placeholder="a sad the cure track, slow, with choir at the end")
-                with gr.Column(scale=1, min_width=0):
-                    draft_model = gr.Dropdown(_choices, value=_choices[0] if _choices else None,
-                                              label="Local model")
-                    draft_btn = gr.Button("Write the style prompt", variant="secondary")
-            draft_note = gr.Markdown("")
-        else:
-            gr.Markdown(
-                "**This is the one optional thing on the page, and it is not installed.**\n\n"
-                "It needs [Ollama](https://ollama.com) running locally. Everything else in "
-                "YuMusic works perfectly without it - this only drafts a starting point you "
-                "would otherwise type yourself.\n\n"
-                "To have it: install Ollama, then `ollama pull gemma2:9b` once.")
-            idea = gr.Textbox(visible=False)
-            draft_model = gr.Dropdown(visible=False)
-            draft_btn = gr.Button(visible=False)
-            draft_note = gr.Markdown(visible=False)
-
-    style = gr.Textbox(label="Style prompt", lines=7, elem_classes=["resizable"],
-                       placeholder="English, {indie pop|dream pop}, bright acoustic guitar, female vocals",
-                       info="Editable while a batch runs - the change lands on the next track.")
-    style_note = gr.Markdown(C.prompt_mode_note("Style", ""))
-
-    C.tag_buttons("yum_lyrics")
-
-    lyrics = gr.Textbox(label="Lyrics", lines=7, elem_id="yum_lyrics",
-                        elem_classes=["resizable"],
-                        placeholder="[Verse]\n...\n[Chorus]\n...",
-                        info="Editable while a batch runs - the change lands on the next track.")
-    lyrics_note = gr.Markdown(C.prompt_mode_note("Lyrics", ""))
-
-    instrumental = setting(
-        "Instrumental", C.INSTRUMENTAL_INFO,
-        lambda: gr.Checkbox(value=False, label="No voices at all"))
-
-    # -------------------------------------------------------------- the settings
-    section("\N{WRENCH} Settings", colour="green")
-
-    duration_s = setting(
-        "Target duration",
-        "In seconds, and the only length control there is. The model's own ceiling is six "
-        "minutes - 360 seconds - and asking for more simply stops at six.",
-        lambda: gr.Number(value=120, precision=0, label="Seconds", show_label=False))
-
-    track_seed = setting(
-        "Track seed",
-        "-1 gives every track a new random seed. Type a number instead to reproduce a track "
-        "you liked - every track writes its own seed into its .txt file.",
-        lambda: gr.Number(value=-1, precision=0, label="Track seed", show_label=False))
-
-    vary_seed = setting(
-        "Walk the seed",
-        "With a fixed seed, add 1 for each extra track: same family, real variation. "
-        "Ignored while the seed is -1, which is already random every time.",
-        lambda: gr.Checkbox(value=True, label="Add 1 to the seed for each extra track"))
-
-    _row, _col = explain("Metre and tempo", C.METER_INFO)
-    with _col:
-        meter_label = gr.Dropdown(list(C.METERS), value=C.DEFAULT_METER, label="Metre")
-        tempo = gr.Number(value=0, precision=0, label="Tempo (0 = model decides)")
-    _row.__exit__(None, None, None)
-
-    rhythm = setting(
-        "Rhythmic complexity", C.RHYTHM_INFO,
-        lambda: gr.Slider(0, 5, value=0, step=1, label="Rhythmic complexity",
-                          show_label=False))
-
-    _row, _col = explain("Harmonic daring", C.DARING_INFO)
-    with _col:
-        daring = gr.Slider(0, 10, value=C.DARING_DEFAULT, step=1,
-                           label="Harmonic daring", show_label=False)
-        daring_readout = gr.Markdown(f"`{C.daring_label(C.DARING_DEFAULT)}`")
-    _row.__exit__(None, None, None)
-
-    style_strength = setting(
-        "Style strength", C.STYLE_STRENGTH_INFO,
-        lambda: gr.Slider(1.0, 3.0, value=1.0, step=0.1, label="Style strength",
-                          show_label=False))
-
-    # -------------------------------------------------------------------- advanced
-    with gr.Accordion("\N{TEST TUBE} Advanced - open only when everything else is settled",
-                      open=False):
-        planning_label = setting(
-            "Score planning",
-            "The model writes a score before it renders any audio. **Melody + chords** is "
-            "what harmonic work needs, and what Harmonic daring acts on. Turning it off "
-            "goes straight to sound, and there is then no score to look at or export.",
-            lambda: gr.Radio(list(C.SCORE_PLANNING), value=C.DEFAULT_PLANNING,
-                             label="Score planning", show_label=False))
-        score_file = setting(
-            "Start from an existing score",
-            "Hand it an `.abc` file and it renders that score instead of writing a new one. "
-            "This is how a score you have edited by hand gets back into the model.",
-            lambda: gr.File(label="Score (.abc)", file_types=[".abc", ".txt"],
-                            show_label=False))
-        refine_steps = setting(
-            "Audio refinement steps",
-            "Leave blank for the model's own default. More steps means a longer render for "
-            "a difference you may not hear.",
-            lambda: gr.Number(value=None, precision=0, label="Steps", show_label=False))
+    A = C.advanced_block()
+    style_strength, planning_label = A["style_strength"], A["planning_label"]
+    score_file, refine_steps = A["score_file"], A["refine_steps"]
 
     # ------------------------------------------------------------------- the run
     section("\N{PACKAGE} The run", colour="amber")
 
     num_tracks = setting(
         "Number of tracks",
-        "How many renders this run makes, each with its own seed. They all land in one "
-        "folder named after the batch name above.",
+        "How many pieces this run makes, each with its own seed. They all go into one "
+        "folder named after the batch.",
         lambda: gr.Slider(1, 100, value=1, step=1, label="Number of tracks",
                           show_label=False))
 
-    _row, _col = explain(
-        "Extra formats",
-        "The .wav, the .abc score and the .txt settings are always written. These are "
-        "copies beside them.  \n" + C.MIDI_INFO)
+    _row, _col = explain("Extra formats", C.FORMATS_INFO)
     with _col:
         save_mp3 = gr.Checkbox(label="Also save MP3")
         save_flac = gr.Checkbox(label="Also save FLAC")
         save_midi = gr.Checkbox(label="Also save MIDI (opens in GarageBand)")
     _row.__exit__(None, None, None)
 
-    gr.Button("\N{UPWARDS BLACK ARROW}\uFE0F  That is everything - take me back up to Generate",
-              variant="secondary", elem_classes=["totop"]).click(
-        fn=None, inputs=None, outputs=None,
-        js="""() => {
-  const bar = document.querySelector('.runbar');
-  if (bar) {
-    bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    bar.classList.add('flash');
-    setTimeout(() => bar.classList.remove('flash'), 1600);
-  } else {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-}""")
+    C.to_top_button()
 
     # --------------------------------------------------------------- the results
     section("\N{SPEAKER WITH THREE SOUND WAVES} Results", colour="slate")
-    audio_out = gr.Audio(label="Latest track", type="filepath")
-    reveal_btn = gr.Button(C.REVEAL_LABEL, size="sm", variant="secondary")
-    where_note = gr.Markdown("")
+    # interactive=False: a player, not a drop zone. In 2.21 the empty player said
+    # "drop audio here", which is an invitation to do the wrong thing.
+    audio_out = gr.Audio(label="Latest track", type="filepath", interactive=False,
+                         elem_classes=["player"])
+    score_note = gr.Markdown(C.SCORE_NOTE_IDLE, elem_classes=["scorenote"])
+    with gr.Row(equal_height=True, elem_classes=["runfoot"]):
+        reveal_btn = gr.Button(C.REVEAL_LABEL, scale=0, min_width=0,
+                               elem_classes=["finderbtn"])
+        where_note = gr.Markdown("")
     with gr.Row():
         prompt_out = gr.Textbox(label="Resolved prompt (track in progress)", lines=9,
                                  elem_classes=["resizable"], scale=1)
@@ -583,18 +427,20 @@ with gr.Blocks(title="YuMusic 2", delete_cache=(3600, 21600)) as demo:
     C.close_sections()
 
     # ------------------------------------------------------------------ wiring
-    RESTORE = [variant_label, style, lyrics, instrumental, duration_s, meter_label, tempo,
-               rhythm, daring, style_strength, planning_label, track_seed, batch_name,
-               vary_seed]
+    C.wire_words_and_settings({**R, **WD, **S}, PROMPT, num_tracks)
+
+    RESTORE = [variant_label, style, lyrics, instrumental, duration_s, fit_label,
+               meter_label, tempo, rhythm, daring, style_strength, planning_label,
+               track_seed, batch_name, vary_seed, refine_steps]
 
     def restore(f):
         blank = [gr.update()] * len(RESTORE)
         if not f:
             return (*blank, "")
         path = f if isinstance(f, str) else getattr(f, "name", None)
-        side = C.sidecar_for(path) if path else None
+        side = C.sidecar_for(path, [OUTPUT_DIR]) if path else None
         if side is None:
-            return (*blank, f"*No settings file found beside `{Path(path).name}`.*")
+            return (*blank, f"*No settings file found for `{Path(path).name}` - not beside it, and not in the output folders. Drop its `.txt` instead.*")
         info = C.read_sidecar(side.read_text(encoding="utf-8"))
         if not info:
             return (*blank, C.restored_note(side, info))
@@ -617,62 +463,54 @@ with gr.Blocks(title="YuMusic 2", delete_cache=(3600, 21600)) as demo:
             gr.update(value=info.get("lyrics", "")) if "lyrics" in info else gr.update(),
             # Left OFF on purpose - see the note in yue_common.apply_instrumental().
             gr.update(value=False),
-            num("duration_s"), gr.update(value=meter_value) if meter_value else gr.update(),
+            num("duration_s"),
+            # A track from before 2.22 has no "Score fit" line: it was cut.
+            gr.update(value=C.FIT_LABEL_BY_MODE.get(info.get("fit", "cut"), C.DEFAULT_FIT)),
+            gr.update(value=meter_value) if meter_value else gr.update(),
             num("tempo"), gr.update(value=0), num("daring"), num("style_strength", float),
             gr.update(value=info["planning"]) if info.get("planning") in C.SCORE_PLANNING
             else gr.update(),
             num("seed"),
             gr.update(value=info.get("batch_name", "")) if "batch_name" in info else gr.update(),
             gr.update(value=False),
+            gr.update(value=int(info.get("steps", C.REFINE_DEFAULT))),
             C.restored_note(side, info),
         )
 
-    restore_file.change(restore, inputs=restore_file, outputs=RESTORE + [restore_note])
-
-    batch_name.change(
-        lambda v: "" if C.safe_name(v) else "**Name this run before you start.**",
-        inputs=batch_name, outputs=name_warning)
-
-    for _c in (track_seed, vary_seed, num_tracks):
-        _c.change(C.seed_note, inputs=[track_seed, vary_seed, num_tracks],
-                  outputs=seed_warning)
+    restore_file.change(restore, inputs=restore_file, outputs=RESTORE + [restore_note],
+                        show_progress="hidden")
 
     # See LIVE, at the top of this file, for why these two lists must agree.
     LIVE.bind({
         "variant_label": variant_label, "instrumental": instrumental,
-        "duration_s": duration_s, "meter_label": meter_label, "tempo": tempo,
-        "rhythm": rhythm, "daring": daring, "style_strength": style_strength,
+        "duration_s": duration_s, "fit_label": fit_label, "meter_label": meter_label,
+        "tempo": tempo, "rhythm": rhythm, "daring": daring, "style_strength": style_strength,
         "planning_label": planning_label, "score_file": score_file,
         "track_seed": track_seed, "vary_seed": vary_seed, "refine_steps": refine_steps,
         "save_mp3": save_mp3, "save_flac": save_flac, "save_midi": save_midi,
     })
 
-    open_run_btn.click(lambda: C.open_run_folder(OUTPUT_DIR), outputs=status_out)
+    R["open_run_btn"].click(lambda: C.open_run_folder(OUTPUT_DIR), outputs=status_out)
     reveal_btn.click(C.reveal_track, inputs=audio_out, outputs=where_note)
 
-    draft_btn.click(C.draft_style, inputs=[idea, draft_model], outputs=[style, draft_note])
+    def refresh_estimate(n, dur, variant_label, strength, fit_label):
+        return C.estimate_batch(n, dur, C.MODEL_VARIANTS.get(variant_label, "8bit"), strength,
+                                C.fit_mode(fit_label))
 
-    daring.change(lambda d: f"`{C.daring_label(d)}`", inputs=daring, outputs=daring_readout)
-    style.change(lambda v: (PROMPT.edit("style", v), C.prompt_mode_note("Style", v))[1],
-                 inputs=style, outputs=style_note)
-    lyrics.change(lambda v: (PROMPT.edit("lyrics", v), C.prompt_mode_note("Lyrics", v))[1],
-                  inputs=lyrics, outputs=lyrics_note)
-
-    def refresh_estimate(n, dur, variant_label, strength):
-        return C.estimate_batch(n, dur, C.MODEL_VARIANTS.get(variant_label, "8bit"), strength)
-
-    for ctrl in (num_tracks, duration_s, variant_label, style_strength):
-        ctrl.change(refresh_estimate, inputs=[num_tracks, duration_s, variant_label, style_strength],
-                    outputs=estimate)
+    est_inputs = [num_tracks, duration_s, variant_label, style_strength, fit_label]
+    for ctrl in est_inputs:
+        ctrl.change(refresh_estimate, inputs=est_inputs, outputs=estimate, **C.QUIET)
 
     run = generate_btn.click(
         generate,
-        inputs=[variant_label, style, lyrics, instrumental, duration_s, meter_label, tempo, rhythm,
-                daring, style_strength, planning_label, score_file,
+        inputs=[variant_label, style, lyrics, instrumental, duration_s, fit_label, meter_label,
+                tempo, rhythm, daring, style_strength, planning_label, score_file,
                 track_seed, vary_seed, refine_steps,
                 num_tracks, batch_name, save_mp3, save_flac, save_midi],
-        outputs=[audio_out, prompt_out, files_out, log_out, score_out, progress_bar])
-    stop_btn.click(STOP.request, inputs=None, outputs=status_out, cancels=[run])
+        outputs=[audio_out, prompt_out, files_out, log_out, score_out, progress_bar,
+                 score_note])
+    stop_btn.click(lambda: C.stop_now(STOP, PROG, AWAKE), inputs=None,
+                   outputs=[status_out, progress_bar], cancels=[run])
 
 if __name__ == "__main__":
     note = C.sweep_gradio_cache()

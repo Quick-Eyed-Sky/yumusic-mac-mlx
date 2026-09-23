@@ -20,23 +20,53 @@ buried in a wiki. Nothing leaves your Mac.
 
 ---
 
+## 🆕 New in 2.22
+
+- **Length, explained and under your control.** YuE2 always writes a *whole*
+  piece first — usually 2 to 3 minutes of score — and the duration only
+  decides where the sound stops. Measured on 181 tracks, the median render
+  played **45%** of its own score; at 30 seconds you hear the intro. After
+  every track the page now says how long the score was and how much of it you
+  heard, and a new choice decides what happens when the score is longer:
+  stop the sound (as before), **shorten the score** so it ends at a section
+  boundary, or **play the whole score**.
+- **Harmonic daring says what to expect** at each setting — how many chords,
+  how often the key changes, how often the score breaks, measured on 181
+  tracks — instead of showing sampling numbers.
+- **Style strength is now "Style-prompt fidelity", in Advanced.** It doubles
+  the render time and its effect has not been measured yet.
+- **A cleaner page:** every explanation rewritten and shorter, Words on two
+  columns, a clearer run bar, and a player that is a player rather than a
+  drop zone.
+
+Older versions stay available — see [Versions](#-versions).
+
+---
+
 ## 🧪 Still experimental
 
-Two controls on this page do not fully deliver what their name promises,
+Three controls on this page do not fully deliver what their name promises,
 and burying that in a table further down would be dishonest.
 
 **Harmonic daring** pushes the model's own score-planning sampling past the
 range it was tuned for. That is the entire mechanism - there is no separate
 "safe" version of a daring score underneath it. High settings can, and
 sometimes do, produce a score that falls apart rather than one that is
-merely surprising. Start low, and treat anything past the middle of the
-slider as deliberately unstable, not as a bug report.
+merely surprising. The line under the slider says what each setting gave on
+181 test tracks: 7 to 9 was the useful zone there, and 10 sometimes broke the
+score. Different prompts, a few tracks for some settings: a trend, not a
+promise.
 
 **Instrumental does not reliably silence the model.** Ticking it asks YuE2
 for no voice at all, and it measurably reduces vocals - but the base model
 does not obey the instruction the way a dedicated switch would. Some
 renders still come back with singing. Treat a fully instrumental take as a
 good outcome this render gave you, not a guarantee the setting makes.
+
+**Shorten the score to fit** (new in 2.22) has not yet been judged by ear
+over many tracks: whether YuE2 plays a real ending when the score stops
+before its own outro is not known. Listen to the last seconds of a few
+tracks before trusting it with a long batch.
 
 ---
 
@@ -73,8 +103,12 @@ will genuinely surprise you — see above.
 holding every setting used, and the score itself as a `.abc` file. Drop
 **any file belonging to a track** — the `.txt`, the `.wav`, the score — and
 every control on the page goes back to what made it. The seed is what
-reproduces the composition: leave it alone and raise the duration, and you
-get the same piece, longer.
+reproduces the composition: restore a track, choose **Play the whole score**,
+and you get the same piece without the cut.
+
+**Know what you heard.** After every track: *Score: 53 bars, about 2:20.
+Heard: 1:00 = bars 1 to 22, 43% of the score. Never reached: chorus,
+interlude, outro.* The same line is written into the track's `.txt`.
 
 **Batches that stay editable.** Up to 100 tracks, and **everything on the
 page stays live while a batch runs** — change the style, the lyrics, the
@@ -122,12 +156,18 @@ Finder.
 
 ---
 
-## ⚠️ Two things worth knowing before your first render
+## ⚠️ Three things worth knowing before your first render
 
-**1. The model's own duration ceiling is six minutes.** Ask for more than
+**1. The duration does not make the music shorter.** The model writes a
+whole piece first and the duration only says where the sound stops. With
+lyrics, the length follows the lyrics (fewer lines, shorter piece). With an
+instrumental, only *Shorten the score to fit* can make the piece itself
+shorter.
+
+**2. The model's own duration ceiling is six minutes.** Ask for more than
 360 seconds and it simply stops at six.
 
-**2. Instrumental means the lyrics are thrown away, not sent as a
+**3. Instrumental means the lyrics are thrown away, not sent as a
 suppression.** Tick it and whatever is in the Lyrics box is ignored in
 favour of an explicit instrumental marker — you do not need to clear the
 box first, and leaving text in it costs nothing.
@@ -181,38 +221,44 @@ production, approximate tempo, mood. *"Beautiful, emotional, amazing" tells
 the model nothing it can play; "restrained female alto, dry close vocal"
 tells it exactly what to do.*
 
-**Lyrics**, with section tags inserted at the cursor by seven buttons above
+**Lyrics**, with section tags inserted at the cursor by seven buttons beside
 the box, so you can paste lyrics first and tag them afterwards.
 
 **Instrumental** — see the warning above.
 
 ### Settings
 
-**Target duration**, in seconds, capped at 360 by the model itself.
+**Length** — the target duration in seconds (360 at most), and what to do
+when the score is longer: *stop the sound at the duration* (as before),
+*shorten the score to fit* (it ends at the nearest section boundary; a
+different take), or *play the whole score* (the same take as *stop*, only
+longer; the duration is ignored).
 
-**Track seed**, `-1` for a fresh random seed per track, or a fixed number to
-reproduce a piece — every track writes its own seed into its `.txt`.
-
-**Walk the seed** — with a fixed seed, add 1 per extra track: same family,
-real variation. Ignored while the seed is `-1`, which is already random.
+**Seed** — `-1` for a fresh random seed per track, or a fixed number to
+reproduce a piece — every track writes its own seed into its `.txt`. With a
+fixed seed, *add 1 for each extra track* gives neighbouring pieces instead of
+copies.
 
 **Metre and tempo** — a metre menu and a tempo number, `0` for "model
 decides".
 
-**Rhythmic complexity**, a slider from straightforward to intricate.
+**Rhythmic complexity**, a slider from straightforward to intricate. The page
+shows the exact sentence it adds to your style prompt.
 
-**Harmonic daring** — see *Why this exists* above.
-
-**Style strength**, how hard the render is pushed toward the exact wording
-of the style and lyrics.
+**Harmonic daring** — see *Why this exists* above. The line under the slider
+says what each setting gave on 181 test tracks.
 
 ### Advanced
 
-**Score planning** — *melody + chords* is what harmonic daring acts on;
+**Style-prompt fidelity (CFG)** — how hard the sound is pushed toward the exact
+wording of the style and lyrics. 1.0 is off; above that a render takes about
+twice as long. Not measured yet: compare a few tracks before using it on a
+batch. **Score planning** — *melody + chords* is what harmonic daring acts on;
 turning it off skips straight to audio and there is then no score to
 inspect. **Start from an existing score** hands the app an `.abc` file to
 render as-is, which is how a score you edited by hand gets back into the
-model. **Audio refinement steps** — leave blank for the model's own default.
+model. **Audio refinement steps** — 32 is the model's own setting; leave it
+there unless you are experimenting.
 
 ### The run
 
@@ -223,8 +269,8 @@ written.
 
 ### Results
 
-The audio player, a button to reveal the playing track in the Finder, the
-resolved prompt for the track in progress, the list of files this run has
+The audio player, how long the score was and how much of it you heard, a
+button to reveal the playing track in the Finder, the resolved prompt for the track in progress, the list of files this run has
 saved, a running log, and the sheet music of the latest track.
 
 ---
@@ -241,8 +287,30 @@ A few decisions that are deliberate, in case they look like oversights:
 - **Repetition penalty is deliberately not exposed.** ABC notation has to
   repeat bar lines, rests and note letters constantly; penalising repetition
   there would corrupt the notation rather than loosen the harmony.
+- **Length is measured, not guessed.** `score_length.py` reads the score as
+  bars and seconds, and the renderer cuts it at a section boundary *before*
+  the audio is made, inside the model's own process — no second model load.
 - **Nothing is uploaded, ever.** No telemetry, no account, no network call
   except the one that downloads the model weights, once.
+
+---
+
+## 📦 Versions
+
+This page describes **2.22**, the current version. Earlier versions stay
+available: each one is a
+[tag](https://github.com/Quick-Eyed-Sky/yumusic-mac-mlx/tags) with its own ZIP
+download, and with git, `git checkout v2.20` brings back the first public
+version.
+
+| Version | |
+|---|---|
+| **2.22** (current) | Length explained and controllable, daring says what to expect, Style-prompt fidelity moved to Advanced, the page rewritten. |
+| 2.20 | First public version. |
+
+**Updating:** with git, `git pull` in the folder. With a ZIP, your renders
+live in the app's own `outputs` folder — move that folder out before you
+replace the old folder with the new one.
 
 ---
 

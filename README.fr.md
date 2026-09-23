@@ -21,9 +21,34 @@ Rien ne sort de votre Mac.
 
 ---
 
+## 🆕 Nouveau dans la 2.22
+
+- **La durée, expliquée et maîtrisée.** YuE2 écrit toujours un morceau
+  *entier* d'abord — en général 2 à 3 minutes de partition — et la durée
+  décide seulement où le son s'arrête. Mesuré sur 181 morceaux, le rendu
+  médian jouait **45 %** de sa propre partition ; à 30 secondes, on entend
+  l'intro. Après chaque morceau, la page dit maintenant combien durait la
+  partition et quelle part vous en avez entendue, et un nouveau choix décide
+  de ce qui se passe quand la partition est plus longue : couper le son
+  (comme avant), **raccourcir la partition** pour qu'elle finisse à une fin de
+  section, ou **jouer toute la partition**.
+- **Harmonic daring dit à quoi s'attendre** à chaque réglage — combien
+  d'accords, à quelle fréquence la tonalité change, à quelle fréquence la
+  partition se casse, mesuré sur 181 morceaux — au lieu d'afficher des
+  chiffres d'échantillonnage.
+- **Style strength devient « Style-prompt fidelity », dans Advanced.** Il
+  double le temps de rendu et son effet n'a pas encore été mesuré.
+- **Une page plus claire :** toutes les explications réécrites et plus
+  courtes, Words sur deux colonnes, une barre de lancement plus nette, et un
+  lecteur qui est un lecteur, pas une zone de dépôt.
+
+Les anciennes versions restent disponibles — voir [Versions](#-versions).
+
+---
+
 ## 🧪 Encore expérimental
 
-Deux réglages de cette page ne tiennent pas entièrement ce que leur nom
+Trois réglages de cette page ne tiennent pas entièrement ce que leur nom
 promet, et l'enterrer dans un tableau plus bas serait malhonnête.
 
 **Harmonic daring** pousse l'échantillonnage de l'étape de planification du
@@ -31,8 +56,10 @@ modèle au-delà de la plage pour laquelle il a été réglé. C'est tout le
 mécanisme - il n'y a pas de version « sûre » cachée en dessous d'une
 partition audacieuse. Des réglages élevés peuvent produire, et produisent
 parfois, une partition qui se délite plutôt qu'une partition simplement
-surprenante. Commencez bas, et considérez tout ce qui dépasse le milieu du
-curseur comme volontairement instable, pas comme un bug à signaler.
+surprenante. La ligne sous le curseur dit ce que chaque réglage a donné sur
+181 morceaux de test : 7 à 9 y était la zone utile, et 10 cassait parfois la
+partition. Des prompts différents, peu de morceaux pour certains réglages :
+une tendance, pas une promesse.
 
 **Instrumental ne fait pas taire le modèle de façon fiable.** Cocher la
 case demande à YuE2 de n'avoir aucune voix du tout, et cela réduit
@@ -40,6 +67,11 @@ nettement le chant - mais le modèle de base n'obéit pas à cette consigne
 comme le ferait un interrupteur dédié. Certains rendus reviennent quand
 même avec du chant. Considérez un rendu réellement instrumental comme une
 bonne surprise de ce rendu-là, pas comme une garantie que donne ce réglage.
+
+**Shorten the score to fit** (nouveau dans la 2.22) n'a pas encore été jugé
+à l'oreille sur beaucoup de morceaux : on ne sait pas si YuE2 joue une vraie
+fin quand la partition s'arrête avant sa propre outro. Écoutez les dernières
+secondes de quelques morceaux avant de lui confier un long lot.
 
 ---
 
@@ -80,8 +112,13 @@ lui avec tous les réglages utilisés, et la partition elle-même en `.abc`.
 Déposez **n'importe quel fichier appartenant à un morceau** — le `.txt`, le
 `.wav`, la partition — et tous les réglages de la page reviennent dans
 l'état qui l'a produit. Le seed est ce qui reproduit la composition :
-laissez-le tel quel et augmentez la durée, vous obtenez la même pièce, plus
-longue.
+restaurez un morceau, choisissez **Play the whole score**, et vous obtenez la
+même pièce, sans coupure.
+
+**Savoir ce que vous avez entendu.** Après chaque morceau : *Score: 53 bars,
+about 2:20. Heard: 1:00 = bars 1 to 22, 43% of the score. Never reached:
+chorus, interlude, outro.* La même ligne est écrite dans le `.txt` du
+morceau.
 
 **Des lots qui restent modifiables.** Jusqu'à 100 morceaux, et **tout sur la
 page reste actif pendant qu'un lot tourne** — changez le style, les
@@ -131,12 +168,18 @@ sélectionné dans le Finder.
 
 ---
 
-## ⚠️ Deux choses à savoir avant le premier rendu
+## ⚠️ Trois choses à savoir avant le premier rendu
 
-**1. Le plafond de durée du modèle lui-même est de six minutes.** Demander
+**1. La durée ne raccourcit pas la musique.** Le modèle écrit d'abord un
+morceau entier, et la durée dit seulement où le son s'arrête. Avec des
+paroles, la longueur suit les paroles (moins de lignes, morceau plus court).
+En instrumental, seul *Shorten the score to fit* raccourcit le morceau
+lui-même.
+
+**2. Le plafond de durée du modèle lui-même est de six minutes.** Demander
 plus de 360 secondes s'arrête simplement à six minutes.
 
-**2. Instrumental jette les paroles plutôt que de les faire taire.** Cochez
+**3. Instrumental jette les paroles plutôt que de les faire taire.** Cochez
 la case et ce qu'il y a dans la case Paroles est ignoré au profit d'un
 marqueur instrumental explicite — pas besoin de vider la case d'abord, et
 laisser du texte dedans ne coûte rien.
@@ -193,41 +236,44 @@ emotional, amazing » ne dit rien que le modèle puisse jouer ; « restrained
 female alto, dry close vocal » lui dit exactement quoi faire.*
 
 **Lyrics**, avec des balises de section insérées au curseur par sept
-boutons au-dessus de la case, pour coller les paroles d'abord et les
-baliser ensuite.
+boutons à côté de la case, pour coller les paroles d'abord et les baliser
+ensuite.
 
 **Instrumental** — voir l'avertissement plus haut.
 
 ### Réglages (Settings)
 
-**Target duration**, en secondes, plafonnée à 360 par le modèle lui-même.
+**Length** — la durée visée en secondes (360 au plus), et que faire quand la
+partition est plus longue : *couper le son à la durée* (comme avant),
+*raccourcir la partition* (elle finit à la fin de section la plus proche ;
+une autre prise), ou *jouer toute la partition* (la même prise que *couper*,
+en plus long ; la durée est ignorée).
 
-**Track seed**, `-1` pour un seed aléatoire à chaque morceau, ou un nombre
-fixe pour reproduire une pièce — chaque morceau écrit son propre seed dans
-son `.txt`.
-
-**Walk the seed** — avec un seed fixe, ajoute 1 par morceau supplémentaire :
-même famille, vraie variation. Ignoré tant que le seed est `-1`, déjà
-aléatoire.
+**Seed** — `-1` pour un seed aléatoire à chaque morceau, ou un nombre fixe
+pour reproduire une pièce — chaque morceau écrit son propre seed dans son
+`.txt`. Avec un seed fixe, *ajouter 1 par morceau supplémentaire* donne des
+pièces voisines plutôt que des copies.
 
 **Metre and tempo** — un menu de métrique et un nombre de tempo, `0` pour
 laisser le modèle décider.
 
-**Rhythmic complexity**, un curseur du simple au complexe.
+**Rhythmic complexity**, un curseur du simple au complexe. La page affiche
+la phrase exacte qu'il ajoute à votre style.
 
-**Harmonic daring** — voir *Pourquoi cette interface* plus haut.
-
-**Style strength**, à quel point le rendu est poussé vers la formulation
-exacte du style et des paroles.
+**Harmonic daring** — voir *Pourquoi cette interface* plus haut. La ligne
+sous le curseur dit ce que chaque réglage a donné sur 181 morceaux de test.
 
 ### Avancé (Advanced)
 
-**Score planning** — *melody + chords* est ce sur quoi agit Harmonic
+**Style-prompt fidelity (CFG)** — à quel point le son est poussé vers la
+formulation exacte du style et des paroles. 1.0 = désactivé ; au-dessus, un
+rendu prend environ deux fois plus de temps. Pas encore mesuré : comparez
+quelques morceaux avant de l'utiliser sur un lot. **Score planning** — *melody + chords* est ce sur quoi agit Harmonic
 daring ; le désactiver va directement au son, et il n'y a alors plus de
 partition à consulter. **Start from an existing score** donne à l'app un
 fichier `.abc` à rendre tel quel, ce qui permet de faire revenir dans le
-modèle une partition modifiée à la main. **Audio refinement steps** —
-laisser vide pour le défaut du modèle.
+modèle une partition modifiée à la main. **Audio refinement steps** — 32
+est le réglage du modèle ; le laisser là, sauf pour expérimenter.
 
 ### Le lot (The run)
 
@@ -237,8 +283,8 @@ MP3, FLAC et MIDI à côté du WAV et de la partition `.abc`, toujours écrits.
 
 ### Résultats (Results)
 
-Le lecteur audio, un bouton pour révéler le morceau en cours dans le
-Finder, le prompt résolu pour le morceau en cours, la liste des fichiers
+Le lecteur audio, la durée de la partition et la part entendue, un bouton
+pour révéler le morceau en cours dans le Finder, le prompt résolu pour le morceau en cours, la liste des fichiers
 enregistrés par ce lot, un journal, et la partition du dernier morceau.
 
 ---
@@ -257,9 +303,32 @@ oublis :
   ABC doit répéter constamment des barres de mesure, des silences et des
   lettres de notes ; le pénaliser corromprait la notation plutôt que
   d'assouplir l'harmonie.
+- **La longueur est mesurée, pas devinée.** `score_length.py` lit la
+  partition en mesures et en secondes, et le renderer la coupe à une fin de
+  section *avant* que l'audio soit fabriqué, dans le processus même du
+  modèle — sans second chargement du modèle.
 - **Rien n'est jamais envoyé nulle part.** Pas de télémétrie, pas de
   compte, aucun appel réseau sauf celui qui télécharge les poids du modèle,
   une seule fois.
+
+---
+
+## 📦 Versions
+
+Cette page décrit la **2.22**, la version actuelle. Les versions
+précédentes restent disponibles : chacune est un
+[tag](https://github.com/Quick-Eyed-Sky/yumusic-mac-mlx/tags) avec son propre
+ZIP à télécharger, et avec git, `git checkout v2.20` ramène la première version
+publique.
+
+| Version | |
+|---|---|
+| **2.22** (actuelle) | Durée expliquée et maîtrisée, daring qui dit à quoi s'attendre, Style-prompt fidelity dans Advanced, page réécrite. |
+| 2.20 | Première version publique. |
+
+**Mettre à jour :** avec git, `git pull` dans le dossier. Avec un ZIP, vos
+rendus sont dans le dossier `outputs` de l'app — sortez ce dossier avant de
+remplacer l'ancien dossier par le nouveau.
 
 ---
 
